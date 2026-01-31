@@ -34,3 +34,25 @@ data2 <- read_csv("3210035101_databaseLoadingData.csv")
 head(data2)
 ```
 
+
+```{r}
+library(ggplot2)
+
+data2 = read.csv("C:/Users/rainy/Documents/School/MAT 3379/Project 1/3210035101_databaseLoadingData.csv")
+delivery_data = data.frame(Date = data2$REF_DATE,
+                           Value = as.numeric(data2$VALUE))
+
+head(delivery_data)
+p2 = ggplot(delivery_data, aes(x=Date, y = Value, group=1))+
+             geom_line(color="blue", size=1)+
+  labs(
+    title = "Producer deliveries of Wheat, Excluding Durum",
+    subtitle = "2002-2025",
+    x = "Date (Monthly)",
+    y = "Grain (Tonnes)",
+    caption = "Source: Statistics Canada. Table 32-10-0351-01  Producer deliveries of major grains"
+  ) 
+print(p2)
+```
+
+
