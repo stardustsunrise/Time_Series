@@ -26,8 +26,8 @@ library(dplyr)
 #Import datasets
 ```{r}
 library(readr)
-wheat_data <- read_csv("3210007701_databaseLoadingData.csv")
-head(wheat_data)
+price_data <- read_csv("3210007701_databaseLoadingData.csv")
+head(price_data)
 ```
 ```{r}
 data2 <- read_csv("3210035101_databaseLoadingData.csv")
@@ -38,7 +38,7 @@ head(data2)
 ```{r}
 library(ggplot2)
 
-data2 = read.csv("C:/Users/rainy/Documents/School/MAT 3379/Project 1/3210035101_databaseLoadingData.csv")
+#data2 = read.csv("C:/Users/rainy/Documents/School/MAT 3379/Project 1/3210035101_databaseLoadingData.csv")
 delivery_data = data.frame(Date = data2$REF_DATE,
                            Value = as.numeric(data2$VALUE))
 
