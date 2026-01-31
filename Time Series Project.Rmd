@@ -30,7 +30,7 @@ wheat_data <- read_csv("3210007701_databaseLoadingData.csv")
 head(wheat_data)
 ```
 ```{r}
-delivery_data <- read_csv("3210035101_databaseLoadingData.csv")
-head(delivery_data)
+data2 <- read_csv("3210035101_databaseLoadingData.csv")
+head(data2)
 ```
 
