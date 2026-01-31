@@ -23,13 +23,10 @@ summary(mtcars)
 library(dplyr)
 
 ```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+#Import dataset
+```{r}
+library(readr)
+X3210007701_data <- read_csv("3210007701_databaseLoadingData.csv")
+head(X3210007701_data)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
