@@ -25,6 +25,7 @@ library(dplyr)
 ```
 #Import datasets
 ```{r}
+
 library(readr)
 price_data <- read_csv("3210007701_databaseLoadingData.csv")
 head(price_data)
@@ -79,6 +80,7 @@ ggplot(price_data, aes(x = date, y = avg_price_canada)) +
     y = "Average Price"
   ) +
   theme_minimal()
+print(price_data)
 
 ```
 
