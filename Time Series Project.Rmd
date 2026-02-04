@@ -108,7 +108,7 @@ abline(h = 0, col = 'black', lty = 2)
 plot( delivery_data_D3, type = 'l', xlab = 'Date', ylab = "Wheat (Tonnes)", main = "Log Differencing")
 abline(h = 0, col = 'black', lty = 2)
 
-#Log Differencing is the best option. It does not appear to have a trend.
+#Log Differencing is the best option.
 ```
 
 # 2.2 Removing Seasonal Effects (delivery data)
