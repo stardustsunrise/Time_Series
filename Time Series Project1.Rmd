@@ -1,0 +1,338 @@
+---
+title: "Time Series Project"
+author: "Group 1"
+date: "2026-01-31"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+
+summary(mtcars)
+
+library(dplyr)
+
+```
+#Import datasets
+```{r}
+library(readr)
+library(ggplot2)
+library(quantmod) # loading data sets from online
+library(dplyr) # for the pipes
+library(kableExtra) # for kable
+library(lubridate) # for years...
+library(knitr)
+library(tidyr)
+
+#Downloading data from (github/statscan) for processing
+#Data= Prices of various food products, by Province in Canada, from January 2002 to November 2025. Prices are measured in CAD per Metric Tonne
+Data_Price <- read.csv("https://raw.githubusercontent.com/stardustsunrise/Time_Series/refs/heads/main/3210007701_databaseLoadingData.csv")
+
+head(Data_Price)
+str(Data_Price)
+
+print(Data_Price)
+
+
+#Convert to data frame
+
+
+Price_data = data.frame(Date= as.Date(paste0(Data_Price$REF_DATE,"-01")), 
+                        Price_per_MTonne= Data_Price$VALUE,
+                        
+                        Product=c("Wheat (except durum wheat) [1121111]"))
+print(Price_data)
+
+
+Price_chart = ggplot(Price_data, aes(x=Date,y= Price_per_MTonne, group=1))+
+                       geom_line(color="green", size=1)+
+                       labs(
+                         title = "Price of Farm products per Month",
+                         subtitle= "2002-2025",
+                         x="Date (Monthly)",
+                         y="Price (Monthly)",
+                         Caption= " Source Stats can"
+                       )
+print(Price_chart)
+
+# Averaging the price of "Wheat (except durum wheat) [1121111]" accross all provinces to have 1 avg monthly price value for whole of Canada
+Price_data<-Price_data%>%
+  group_by(Date)%>%
+  summarise(avg_price_canada=mean(Price_per_MTonne,na.rm= TRUE))%>%
+  ungroup()
+
+
+print(Price_data)
+
+Price_chart2 = ggplot(Price_data, aes(x=Date,y=avg_price_canada, group=1))+
+  
+  geom_line(color="black", size =1)+
+  labs(
+    title="Price of Wheat, Excluding Durum",
+    subtitle = "2002-2025",
+    x="Date(Monthly)",
+    y="Average of Price Accross Canada per",
+    caption="Source: Statistics Canada. Table 32-10-0351-01 Prices of Farm products----double check"
+  )
+print(Price_chart2)
+
+
+#Descriptive Statistics
+summary(Price_data)
+
+desc_stat1<- Price_data%>%
+  summarise(
+    Observation=n(),
+    Starting_Date=min(Date),
+    End_Date=max(Date),
+    Mean=mean(Price_data$avg_price_canada),
+    SD=sd(Price_data$avg_price_canada)
+  )
+print(desc_stat1)
+
+desc_stat2<-Price_data%>%
+  summarise(
+    Min=min(avg_price_canada),
+    Q1 = quantile(avg_price_canada, 0.25),
+    Median = median(avg_price_canada),
+    Q3 = quantile(avg_price_canada, 0.75),
+    Max = max(avg_price_canada),
+#Missing_Values = missing_count
+)
+print(desc_stat2)
+
+kable(desc_stat1,
+      caption = "Descriptive Statistics: Price Per Tonne Wheat(excluding Durum)",
+      col.names = c("Observation", "Start Date", "End Date", "Mean", "Std Dev"), digits=2)%>%
+  kable_styling(latex_options = c("striped","hold_position", "scale_down"))
+
+
+
+kable(desc_stat2,
+      caption="Descriptive Statistics: Price Per Tonne Wheat(excluding Durum)",
+      col.names= c("Minimum","Q1","Median","Q3","Maximum"),
+      digits=2)%>%
+      kable_styling (latex_options = c("striped", "hold_position", "scale_down", position = "center"))
+
+
+
+```
+
+
+```{r}
+
+
+library(patchwork)
+library(tseries)
+library(gridExtra)
+         
+print(Price_data)
+#2.1 Removing Trend
+
+#converting time series to object
+
+Price_data_ts=ts(Price_data$avg_price_canada,
+                 start = c(2002-01-01,1),
+                 frequency = 12)
+
+str(Price_data_ts)
+
+#calculate transformation
+Diff=diff(Price_data_ts)#First difference
+Log_diff=diff(log(Price_data_ts))#Difference of Logarithms
+
+#create dataframe for visualisation
+Price_data_transform=data.frame(
+  Date=Price_data$Date[-1],
+  Diff=as.numeric(Diff),
+  Log_diff=as.numeric(Log_diff)
+)
+
+p1=ggplot(Price_data_transform,aes(x=Date,y=Diff))+
+  geom_line(color="blue")+
+  labs(title = "Wheat Price Data Set- First Difference",
+       x="Date",
+       y="Price per Ton")
+
+p2=ggplot(Price_data_transform,aes(x=Date,y=Log_diff))+
+  geom_line(color="green")+
+  labs(title = "Wheat Price Data Set- Log Difference",
+       x="Date",
+       y="Price per Ton")
+
+#display side by side
+p1/p2
+# preference for log difference
+
+
+
+#2.2 Removing seasonal component
+
+library(forecast)
+
+#Indentifying Seasonality
+
+par(mfrow=c(1,2))
+Acf(Diff,
+main = "ACF of diff(Price of Wheat)",
+lag.max = 300,
+xlab = "Months", 
+xlim=c(1,300))
+
+Acf(Log_diff,
+    main = "ACF of diff(log(Price of Wheat))",
+    lag.max = 300,
+    xlab = "Months", 
+    xlim = c(1, 300))
+
+#Test for iid noise
+
+# Ljung-Box tests
+cat("1. Ljung-Box tests (H0: No autocorrelation up to lag 48):\n\n")
+## 1. Ljung-Box tests (H0: No autocorrelation up to lag 48):
+
+Box.test(Diff, lag = 12, type = "Ljung-Box")
+
+
+Box.test(Diff, lag = 12, type = "Ljung-Box")
+
+
+plot(Log_diff,type="l",xlab="n", ylab=expression("Log_diff"))
+abline(h=0,col="darkgreen",lty=2)
+
+
+
+# Removing Seasonality
+
+P_D1<-diff(Log_diff,difference=1)
+P_D3<-diff(Log_diff,differences=3)
+P_D12<-diff(Log_diff,differences=12)
+P_D24<-diff(Log_diff,differences=24)
+
+# First order difference
+
+plot( P_D1, type = 'l', xlab = 'Months' , ylab = expression(nabla*"Price Per Ton"))
+
+
+#third order difference
+plot( P_D3, type = 'l', xlab = 'Months', ylab = expression(nabla^3*"Price Per Ton"))
+
+#12th order difference
+plot( P_D12, type = 'l', xlab = 'Months', ylab = expression(nabla^12*"Price Per Ton"))
+
+#24th order difference
+plot( P_D24, type = 'l', xlab = 'Months', ylab = expression(nabla^24*"Price Per Ton"))
+
+
+#preference to Difference of 1st order
+
+Deseasonlised_pricedata=P_D1
+#2.3 Analysis of differenced Series (Price Data)
+library(ggplot2)
+Mean_pricedata=mean(Deseasonlised_pricedata)
+
+Mean_pricedata
+
+Variance_pricedata=var(Deseasonlised_pricedata)
+
+Variance_pricedata
+
+Standard_dav_Pricedata=sqrt(Variance_pricedata)
+Variance_pricedata
+
+summary(Deseasonlised_pricedata)
+
+
+lower = qnorm(mean = Mean_pricedata, sd = Standard_dav_Pricedata, p=0.05)
+
+upper = qnorm(mean = Mean_pricedata, sd = Standard_dav_Pricedata, p=0.95)
+
+plot(Deseasonlised_pricedata, type = 'l', main = 'Price Data, deseasonalized', xlab = 'month', ylab = "Wheat shipped, tonnes")
+abline(h = 0, col = 'darkblue', lty = 2)
+abline(h = lower, col = 'darkgreen', lty = 2)
+abline(h = upper, col = 'darkred', lty = 2)
+
+
+#Check if 95% is within.
+number=0
+for(n in 1:length(Deseasonlised_pricedata)){
+  if(Deseasonlised_pricedata[n]>upper){
+    number=number+1
+  }
+  if(Deseasonlised_pricedata[n]<lower){
+    number=number+1
+  }
+}
+ number
+ 
+ #29 out of 287 (about 10%) of the values lie outside this range. If the process is stationary, about 5% (14.35) should lie outside this interval on average.
+ 
+ acf(Deseasonlised_pricedata, 
+    main="ACF of deseasonalized series",
+    lag.max = 300,
+    xlab = "Months",
+    xlim=c(1,12)
+  )
+
+ 
+```
+
+
+```{r}
+library(ggplot2)
+
+#data2 = read.csv("C:/Users/rainy/Documents/School/MAT 3379/Project 1/3210035101_databaseLoadingData.csv")
+delivery_data = data.frame(Date = data2$REF_DATE,
+                           Value = as.numeric(data2$VALUE))
+
+head(delivery_data)
+p2 = ggplot(delivery_data, aes(x=Date, y = Value, group=1))+
+             geom_line(color="blue", size=1)+
+  labs(
+    title = "Producer deliveries of Wheat, Excluding Durum",
+    subtitle = "2002-2025",
+    x = "Date (Monthly)",
+    y = "Grain (Tonnes)",
+    caption = "Source: Statistics Canada. Table 32-10-0351-01  Producer deliveries of major grains"
+  ) 
+print(p2)
+```
+
+```{r}
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+price_data <- price_data %>%
+  mutate(date = as.Date(paste0(REF_DATE, "-01")))
+
+price_data <- price_data %>%
+  group_by(date) %>%
+  summarize(
+    avg_price_canada = mean(VALUE, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+ggplot(price_data, aes(x = date, y = avg_price_canada)) +
+  geom_line() +
+  labs(
+    title = "Monthly Average Prices of Wheat in Canada",
+    x = "Month",
+    y = "Average Price"
+  ) +
+  theme_minimal()
+print(price_data)
+
+```
+
