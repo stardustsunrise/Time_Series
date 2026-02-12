@@ -282,27 +282,180 @@ for(n in 1:length(Deseasonlised_pricedata)){
  
 ```
 
+#Question 3: filtering
+## 3.1 Linear Smoothing
+We have $$X̃_t = (1/(2q+1)) Σ_{j=-q}^{q} X_{t-j}$$
+```{r}
+# Apply filtering to log-differenced series
+Series_to_filter <- Price_data_ts
+n <- length(Series_to_filter)
+
+# --- q = 6 ---
+q1 <- 6 #this is in the range from 5 to 9, helping reduce the high volatility of the data
+weights1 <- rep(1/(2*q1+1), 2*q1+1)
+
+Linear_filtered_q6 <- stats::filter(
+  Series_to_filter,
+  filter = weights1,
+  sides = 2
+)
+
+# --- q = 12 ---
+q2 <- 12 #this helps to address the seasonality of the data
+weights2 <- rep(1/(2*q2+1), 2*q2+1)
+
+Linear_filtered_q12 <- stats::filter(
+  Series_to_filter,
+  filter = weights2,
+  sides = 2
+)
+
+# --- Plot ---
+plot(Series_to_filter, type="l", col="black",
+     main="Linear Moving Average Filter Price Data",
+     ylab="Values")
+
+lines(Linear_filtered_q6, col="blue", lwd=2)
+lines(Linear_filtered_q12, col="red", lwd=2)
+
+legend("topright",
+       legend=c("Original", "q = 6", "q = 12"),
+       col=c("black", "blue", "red"),
+       lty=1, lwd=c(1,2,2))
+
+```
+Justification of q = 12:
+Monthly data → annual seasonal structure ≈ 12 months.
+Justification of q = 6:
+The data shows a decently high level of volatility (or high variance in other terms).
+##3.2 Exponential Smoothing Filter
+
+$$X̃_t = α X_t + (1−α) X̃_{t−1}$$
+
 
 ```{r}
-library(ggplot2)
+exponential_smoothing <- function(X, alpha) {
+  N <- length(X)
+  X_smooth <- rep(NA, N)
+  
+  # Initialize with first observation
+  X_smooth[1] <- X[1]
+  
+  # Recursive smoothing
+  for (t in 2:N) {
+    X_smooth[t] <- alpha * X[t] + (1 - alpha) * X_smooth[t - 1]
+  }
+  
+  return(X_smooth)
+}
 
-#data2 = read.csv("C:/Users/rainy/Documents/School/MAT 3379/Project 1/3210035101_databaseLoadingData.csv")
-delivery_data = data.frame(Date = data2$REF_DATE,
-                           Value = as.numeric(data2$VALUE))
+# --- Alpha for seasonal smoothing ---
+X_exp1 <- ts(exponential_smoothing(Price_data_ts, alpha = 0.2),
+             start = start(Price_data_ts),
+             frequency = frequency(Price_data_ts))
+# --- Alpha for high volatility ---
+X_exp2 <- ts(exponential_smoothing(Price_data_ts, alpha = 0.8),
+             start = start(Price_data_ts),
+             frequency = frequency(Price_data_ts))
+plot.ts(Price_data_ts,
+        main = 'Exponential Smoothing Comparison Price Data',
+        xlab = 'Time',
+        ylab = 'Values')
 
-head(delivery_data)
-p2 = ggplot(delivery_data, aes(x=Date, y = Value, group=1))+
-             geom_line(color="blue", size=1)+
-  labs(
-    title = "Producer deliveries of Wheat, Excluding Durum",
-    subtitle = "2002-2025",
-    x = "Date (Monthly)",
-    y = "Grain (Tonnes)",
-    caption = "Source: Statistics Canada. Table 32-10-0351-01  Producer deliveries of major grains"
-  ) 
-print(p2)
+lines(X_exp1, col = 'red')
+lines(X_exp2, col = 'blue')
+
+abline(h = 0, col = 'black', lty = 2)
+
+legend("topright",
+       legend = c("Original", "alpha = 0.2", "alpha = 0.8"),
+       col = c('black', 'red', 'blue'),
+       lty = 1,
+       lwd = 2)
 ```
 
+I would recommend the linear filter since the Exponential one does not appear to make as big of a difference. The optimal filtering from the ones chosen is linear with q=12 as it appears to be the most smooth from those seen
 
 
+#Question 4 – Stationarity Analysis
+# Chosen plot
+```{r}
+plot(Deseasonlised_pricedata, type = 'l', main = 'Price Data, deseasonalized', xlab = 'month', ylab = "Wheat shipped, tonnes")
+abline(h = 0, col = 'darkblue', lty = 2)
+abline(h = lower, col = 'darkgreen', lty = 2)
+abline(h = upper, col = 'darkred', lty = 2)
+```
+The deseasonalized series was chosen since it does not appear to have a trend or a major seasonal component, whereas the filtered data appears to still have a trend. Now we can test for stationarity
+##4.1 Testing Weak Stationarity
+```{r}
+Stationary_series <- Deseasonlised_pricedata
+library(tseries)
 
+# ADF Test
+adf.test(Stationary_series)
+
+# KPSS Test
+kpss.test(Stationary_series)
+
+```
+H0: time series is stationary,
+H1: H0 is false.
+We get ADF p < 0.05 and KPSS p > 0.05, and thus weak stationarity is supported, we fail to reject the null hypothesis.
+
+##4.2 Autocorrelation Function (ACF)
+$$ρ^​(h)=∑t=1n​(Xt​−Xˉ)2∑t=h+1n​(Xt​−Xˉ)(Xt−h​−Xˉ)​$$
+```{r}
+ACF_estimator <- function(X, hmax){
+  n <- length(X)
+  X_bar <- mean(X)
+  acf_vals <- numeric(hmax+1)
+  
+  for(h in 0:hmax){
+    num <- sum((X[(h+1):n]-X_bar)*
+                 (X[1:(n-h)]-X_bar))
+    den <- sum((X-X_bar)^2)
+    acf_vals[h+1] <- num/den
+  }
+  
+  return(acf_vals)
+}
+
+hmax <- 40
+acf_values <- ACF_estimator(Stationary_series, hmax)
+
+# 95% CI
+CI <- 1.96/sqrt(length(Stationary_series))
+
+plot(0:hmax, acf_values, type="h",
+     main="Estimated ACF",
+     xlab="Lag", ylab="ACF")
+abline(h=0)
+abline(h=CI, col="red", lty=2)
+abline(h=-CI, col="red", lty=2)
+
+```
+We have some seasonal spikes, which means there is remaining periodicity.
+##4.3 Custom PACF Function
+```{r}
+PACF_estimator <- function(X, hmax){
+  pacf_vals <- numeric(hmax)
+  
+  for(h in 1:hmax){
+    model <- ar(X, order.max=h, aic=FALSE, method="yw")
+    pacf_vals[h] <- model$ar[h]
+  }
+  
+  return(pacf_vals)
+}
+
+pacf_values <- PACF_estimator(Stationary_series, hmax)
+
+plot(1:hmax, pacf_values, type="h",
+     main="Estimated PACF",
+     xlab="Lag", ylab="PACF")
+abline(h=0)
+abline(h=CI, col="blue", lty=2)
+abline(h=-CI, col="blue", lty=2)
+
+```
+Looks like there is gradual decay and thus this may be an MA process.
