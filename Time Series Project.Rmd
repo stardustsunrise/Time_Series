@@ -23,19 +23,23 @@ summary(mtcars)
 library(dplyr)
 
 ```
+
 #Import datasets
+
 ```{r}
 
 library(readr)
 price_data <- read_csv("3210007701_databaseLoadingData.csv")
 head(price_data)
 ```
+
 ```{r}
 data2 <- read_csv("3210035101_databaseLoadingData_2.csv")
 head(data2)
 ```
 
 #1.2 Graphical exploration (delivery data)
+
 ```{r}
 library(ggplot2)
 
@@ -54,7 +58,9 @@ p2 = ggplot(delivery_data, aes(x=Date, y = Value, group=1))+
   ) 
 print(p2)
 ```
+
 #1.2 Graphical exploration (price data)
+
 ```{r}
 
 library(dplyr)
@@ -83,8 +89,8 @@ print(price_data)
 
 ```
 
-
 #2.1 Removing the Trend (Delivery data)
+
 ```{r}
 delivery_data_D1 = diff(delivery_data$Value)
 delivery_data_D2 = diff(delivery_data_D1)
@@ -112,6 +118,7 @@ abline(h = 0, col = 'black', lty = 2)
 ```
 
 # 2.2 Removing Seasonal Effects (delivery data)
+
 ```{r}
 library(forecast)
 
@@ -136,6 +143,7 @@ abline(h = 0, col = 'black', lty = 2)
 ```
 
 #2.3 Analysis of differenced Series (delivery data)
+
 ```{r}
 mean=mean(delivery_data_deseasonalized)
 varience = var(delivery_data_deseasonalized)
@@ -173,4 +181,266 @@ for(n in 1:length(delivery_data_deseasonalized)){
  
 ```
 
+#3.1
 
+```{r}
+
+library(zoo)
+
+# Define q ranges
+q_grid_var <- 1:10
+q_grid_rmse <- 1:10
+
+# Variance after smoothing
+vars <- sapply(q_grid_var, function(q) {
+  var(rollmean(delivery_data_deseasonalized, k = q, fill = NA), na.rm = TRUE)
+})
+
+plot(q_grid_var, vars, type = "b",
+     xlab = "q", ylab = "Variance after smoothing",
+     main = "Variance Reduction vs q")
+
+# RMSE after smoothing
+rmse_results <- sapply(q_grid_rmse, function(q) {
+  sm <- rollmean(delivery_data_deseasonalized, k = q, fill = NA)
+  sqrt(mean((delivery_data_deseasonalized - sm)^2, na.rm = TRUE))
+})
+
+plot(q_grid_rmse, rmse_results, type = "b", pch = 19, col = "blue",
+     xlab = "Smoothing Parameter (q)", 
+     ylab = "RMSE", 
+     main = "RMSE vs. Parameter q")
+
+# Apply chosen q, 2 plots to compare
+q <- 5
+q2 = 4
+
+smoothed <- rollmean(delivery_data_deseasonalized, k = q, fill = NA)
+smoothed2 <- rollmean(delivery_data_deseasonalized, k = q2, fill = NA)
+
+zoom_start = 0
+zoom_end = 100
+
+plot(delivery_data_deseasonalized, type = "l",
+     col = "gray50", lwd = 1,
+     main = paste("Linear Moving Average Filter (q =", q, ")"),
+     xlab = "Time", ylab = "Value",
+     xlim = c(zoom_start, zoom_end))
+
+lines(smoothed, col = "red", lwd = 2)
+
+legend("topleft",
+       legend = c("Original", "Moving Average"),
+       col = c("gray50", "red"),
+       lwd = c(1, 2),
+       bty = "n")
+
+grid()
+
+#Second plot to compare with
+
+
+plot(delivery_data_deseasonalized, type = "l",
+     col = "gray50", lwd = 1,
+     main = paste("Linear Moving Average Filter (q2 =", q2, ")"),
+     xlab = "Time", ylab = "Value",
+     xlim = c(zoom_start, zoom_end))
+
+lines(smoothed2, col = "red", lwd = 2)
+
+legend("topleft",
+       legend = c("Original", "Moving Average"),
+       col = c("gray50", "red"),
+       lwd = c(1, 2),
+       bty = "n")
+
+grid()
+
+```
+
+```{r}
+ acf(delivery_ts, 
+    main="ACF of deseasonalized series",
+    lag.max = 48,
+    xlab = "Months",
+    xlim=c(1,48)
+  )
+```
+
+```{r}
+
+library(forecast)
+
+
+
+
+# Suppose your time series is called 'ts_data'
+
+# Grid of alpha values to test
+alpha_values <- seq(0.1, 0.5, by = 0.05)
+
+# Function to compute MSE for a given alpha
+mse_for_alpha <- function(alpha) {
+  model <- ses(delivery_data_deseasonalized, alpha = alpha, initial = "simple", h = 1)
+  mean((delivery_data_deseasonalized - fitted(model))^2)
+}
+
+# Compute MSE for each alpha
+errors <- sapply(alpha_values, mse_for_alpha)
+
+# Find alpha with the minimum MSE
+best_alpha <- alpha_values[which.min(errors)]
+best_alpha
+
+
+alpha_value <- 0.5
+exp_series <- ses(delivery_data_deseasonalized, alpha = alpha_value, initial = "simple")$fitted
+
+plot(delivery_data_deseasonalized, type = "l",
+     col = "gray50", lwd = 1,
+     main = "Exponential Smoothing Filter",
+     xlab = "Time", ylab = "Value")
+
+lines(exp_series, col = "blue", lwd = 2)
+
+legend("topleft",
+       legend = c("Original", "Exponential Smoothed"),
+       col = c("gray50", "blue"),
+       lwd = c(1, 2),
+       bty = "n")
+
+grid()
+
+alpha_value <- 0.5
+exp_series <- ses(delivery_data_deseasonalized, alpha = alpha_value, initial = "simple")$fitted
+
+# Define your zoom window here
+zoom_start <- 100
+zoom_end <- 150
+
+plot(delivery_data_deseasonalized, type = "l",
+     col = "gray50", lwd = 1,
+     main = "Exponential Smoothing Filter (Zoomed View)",
+     xlab = "Time", ylab = "Value",
+     xlim = c(zoom_start, zoom_end)) # This line performs the "slice"
+
+lines(exp_series, col = "blue", lwd = 2)
+
+legend("topleft",
+       legend = c("Original", "Exponential Smoothed"),
+       col = c("gray50", "blue"),
+       lwd = c(1, 2),
+       bty = "n")
+
+grid()
+
+
+
+```
+
+```{r}
+zoom_start = 100
+zoom_end = 150
+
+plot(delivery_data_deseasonalized, type = "p",
+     col = "gray60", pch = 16, cex = 0.6,
+     main = "Comparison of Filtering Techniques",
+     xlab = "Time", ylab = "Value",
+     xlim = c(zoom_start, zoom_end))
+
+lines(smoothed, col = "red", lwd = 2)
+lines(exp_series, col = "blue", lwd = 2)
+
+legend("topleft",
+       legend = c("Original", "Moving Average", "Exponential Smoothing"),
+       col = c("gray60", "red", "blue"),
+       pch = c(16, NA, NA),
+       lwd = c(NA, 2, 2),
+       pt.cex = c(0.8, NA, NA),
+       bty = "n")
+
+grid()
+
+
+
+
+
+
+```
+
+```{r}
+#with lab
+
+delivery_ts <- ts(data2$VALUE,
+                  start = c(2002,1), # Start year and month: January 2002
+                  frequency = 12) # 12 observations per year (monthly data)
+
+
+# Define moving average filter function
+moving_average <- function(X, q) {
+  N <- length(X)              # Length of input series
+  weight <- 1 / (2 * q + 1)   # Equal weights for symmetric MA
+  indices <- (q+1):(N-q)      # Indices where filter can be applied
+  X_filt <- rep(NA, N)        # Initialize output with NAs
+  
+  # Apply moving average filter
+  for (i in indices) {
+    X_filt[i] <- sum(X[(i-q):(i+q)] * weight)
+  }
+  return(X_filt)               # Return filtered series
+}
+
+# Apply moving average to your existing time series
+X_filt1 <- ts(moving_average(delivery_ts, 6),
+              start = start(delivery_ts),
+              frequency = frequency(delivery_ts))
+
+X_filt2 <- ts(moving_average(delivery_ts, 12),
+              start = start(delivery_ts),
+              frequency = frequency(delivery_ts))
+
+
+zoom_start <- 1
+zoom_end <- 100
+
+delivery_zoom <- window(delivery_ts, end = time(delivery_ts)[zoom_end])
+X_filt1_zoom <- window(X_filt1, end = time(X_filt1)[zoom_end])
+X_filt2_zoom <- window(X_filt2, end = time(X_filt2)[zoom_end])
+
+
+plot.ts(delivery_zoom,
+        main = 'Delivery Data Deseasonalized (First 100 Obs)',
+        xlab = 'Time',
+        ylab = 'Values')
+
+lines(X_filt1_zoom, col = 'red', lwd = 2)
+lines(X_filt2_zoom, col = 'blue', lwd = 2)
+
+abline(h = 0, col = 'black', lty = 2)
+
+legend("topright",
+       legend = c("Original", "q=2", "q=10"),
+       col = c('black', 'red', 'blue'),
+       lty = 1,
+       lwd = 2)
+
+
+
+
+# Plot original series and filtered versions
+plot.ts(delivery_ts,
+        main = 'Delivery Data Deseasonalized',
+        xlab = 'Time',
+        ylab = 'Values')
+lines(X_filt1, type = 'l', col = 'red')   # Add MA(q=2) in red
+lines(X_filt2, type = 'l', col = 'blue')  # Add MA(q=12) in blue
+abline(h = 0, col = 'black', lty = 2)     # Reference line at 0
+legend("topright",
+       legend = c("Original", "q=2", "q=12"),
+       col = c('black', 'red', 'blue'),
+       lty = 1,
+       lwd = 2)
+
+
+
+```
