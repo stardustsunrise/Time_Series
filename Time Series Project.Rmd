@@ -9,31 +9,15 @@ output: pdf_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# Question 1
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-
-summary(mtcars)
-
-library(dplyr)
-
-```
-
-#Import datasets
+## 1.1 Import datasets
 
 ```{r}
 
 library(readr)
 price_data <- read_csv("3210007701_databaseLoadingData.csv")
 head(price_data)
-
-
-
 
 ```
 
@@ -66,7 +50,7 @@ print(p2)
 
 ```
 
-#1.2 Graphical exploration (Price Data)
+## 1.2 Graphical exploration (Price Data)
 
 ```{r}
 
@@ -76,8 +60,9 @@ library(quantmod) # loading data sets from online
 library(dplyr) # for the pipes
 library(kableExtra) # for kable
 library(lubridate) # for years...
-library(knitr)
 library(tidyr)
+library(knitr)
+
 
 #Downloading data
 Data_Price <- read.csv("https://raw.githubusercontent.com/stardustsunrise/Time_Series/refs/heads/main/3210007701_databaseLoadingData.csv")
@@ -192,9 +177,9 @@ kable(desc_stat2,
 
 ```
 
+# Question 2
 
-
-#2.1 Removing the Trend (Delivery data)
+## 2.1 Removing the Trend (Delivery data)
 
 ```{r}
 delivery_data_D1 = diff(delivery_data$Value)
@@ -222,7 +207,7 @@ abline(h = 0, col = 'black', lty = 2)
 #Log Differencing is the best option.
 ```
 
-#2.1 Removing Trend (Price Data)
+## 2.1 Removing Trend (price data)
 
 ```{r}
 library(patchwork)
@@ -268,7 +253,7 @@ p1/p2
 # preference for log difference
 ```
 
-# 2.2 Removing Seasonal Effects (delivery data)
+## 2.2 Removing Seasonal Effects (delivery data)
 
 ```{r}
 library(forecast)
@@ -293,7 +278,7 @@ abline(h = 0, col = 'black', lty = 2)
 
 ```
 
-#2.2 Removing seasonal component (price data)
+## 2.2 Removing seasonal component (price data)
 
 ```{r}
 library(forecast)
@@ -404,7 +389,7 @@ for(n in 1:length(Deseasonlised_pricedata)){
 
 ```
 
-#2.3 Analysis of differenced Series (delivery data)
+## 2.3 Analysis of differenced Series (delivery data)
 
 ```{r}
 mean=mean(delivery_data_deseasonalized)
@@ -443,9 +428,11 @@ for(n in 1:length(delivery_data_deseasonalized)){
  
 ```
 
-# 3.1 Linear Filter
+# Question 3
 
-## Linear Smoothing 
+## 3.1 Linear Filter (delivery data)
+
+We have $$X̃_t = (1/(2q+1)) Σ_{j=-q}^{q} X_{t-j}$$
 
 ```{r}
 
@@ -541,14 +528,12 @@ legend("topright",
 
 q=12 is better
 
-#Question 3: filtering
+## 3.1 Linear Filter (price data)
 
-\## 3.1 Linear Smoothing
-
-We have \$\$X̃\_t = (1/(2q+1)) Σ\_{j=-q}\^{q} X\_{t-j}\$
+We have $$X̃_t = (1/(2q+1)) Σ_{j=-q}^{q} X_{t-j}$$
 
 ```{r}
-# Apply filtering to log-differenced series
+
 Series_to_filter <- Price_data_ts
 n <- length(Series_to_filter)
 
@@ -589,13 +574,7 @@ legend("topright",
 
 Justification of q = 12: Monthly data → annual seasonal structure ≈ 12 months. Justification of q = 6: The data shows a decently high level of volatility (or high variance in other terms)
 
-
-
-# 3.2 Exponential filter
-
-#Delivery Data
-
-\$$X̃_t = α X_t + (1−α) X̃_{t−1
+## 3.2 Exponential filter (delivery data)
 
 ```{r}
 
@@ -683,8 +662,7 @@ legend("topright",
 
 ```
 
-
-#Price Data
+## 3.2 Exponential filter (price data)
 
 ```{r}
 
@@ -730,14 +708,9 @@ legend("topright",
 
 ```
 
-I would recommend the linear filter since the Exponential one does not
-appear to make as big of a difference. The optimal filtering from the
-ones chosen is linear with q=12 as it appears to be the most smooth from
-those seen
+I would recommend the linear filter since the Exponential one does not appear to make as big of a difference. The optimal filtering from the ones chosen is linear with q=12 as it appears to be the most smooth from those seen
 
-
-
-# 3.3 Comparison of Filtering Techniques ()
+# 3.3 Comparison of Filtering Techniques
 
 ```{r}
 q_choice <- 12
@@ -813,11 +786,11 @@ legend("topright",
 
 ```
 
+I would recommend the linear filter since the Exponential one does not appear to make as big of a difference. The optimal filtering from the ones chosen is linear with q=12 as it appears to be the most smooth from those seen
 
+# Question 4
 
-# 4. Stationarity
-
-# 4.1 Construction of Stationary Series (Delivery Data)
+## 4.1 Construction of Stationary Series (Delivery Data)
 
 ```{r}
 
@@ -914,12 +887,9 @@ adf.test(Stationary_series)
 kpss.test(Stationary_series)
 ```
 
+## 4.1 Construction of Stationary Series (Price)
 
-#4.1 Construction of Stationary Series (Price Data)
-
-For the price data the deseasonalized series was chosen since it does not appear to have a
-trend or a major seasonal component, whereas the filtered data appears
-to still have a trend. Now we can test for stationarity
+For the price data the deseasonalized series was chosen since it does not appear to have a trend or a major seasonal component, whereas the filtered data appears to still have a trend. Now we can test for stationarity
 
 ```{r}
 plot(Deseasonlised_pricedata, type = 'l', main = 'Price Data, deseasonalized', xlab = 'month', ylab = "Wheat shipped, tonnes")
@@ -928,7 +898,6 @@ abline(h = lower, col = 'darkgreen', lty = 2)
 abline(h = upper, col = 'darkred', lty = 2)
 
 ```
-
 
 ## Significance Test (Price Data)
 
@@ -943,11 +912,9 @@ kpss.test(na.omit(residuals_q12))
 
 ADF test and KPSS support that the series is stationary.
 
+## 4.2 Autocorrelation Function (ACF) $$ρ^​(h)=∑t=1n​(Xt​−Xˉ)2∑t=h+1n​(Xt​−Xˉ)(Xt−h​−Xˉ)​$$
 
-##4.2 Autocorrelation Function (ACF)
-$$ρ^​(h)=∑t=1n​(Xt​−Xˉ)2∑t=h+1n​(Xt​−Xˉ)(Xt−h​−Xˉ)​$$
-
-###Delivery Data
+## Delivery Data
 
 ```{r}
 ACF_estimator <- function(X, hmax){
@@ -982,7 +949,7 @@ abline(h = -CI, col = "red", lty = 2)
 
 ```
 
-###Delivery Data (Price Data)
+## Price Data
 
 ```{r}
 
@@ -1001,15 +968,11 @@ abline(h=-CI, col="red", lty=2)
 
 ```
 
-We have some seasonal spikes, which means there is remaining
-periodicity. 
+We have some seasonal spikes, which means there is remaining periodicity.
 
+## 4.3 Custom PACF Function
 
-
-
-##4.3 Custom PACF Function
-
-###Delivery Data
+## Delivery Data
 
 ```{r}
 PACF_estimator <- function(X, hmax){
@@ -1036,6 +999,7 @@ abline(h=CI, col="blue", lty=2)
 abline(h=-CI, col="blue", lty=2)
 ```
 
+## Price Data
 
 ```{r}
 
@@ -1052,6 +1016,3 @@ abline(h=-CI, col="blue", lty=2)
 ```
 
 Looks like there is gradual decay and thus this may be an MA process.
-
-
-
