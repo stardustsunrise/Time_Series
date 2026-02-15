@@ -48,6 +48,45 @@ Price_data = data.frame(Date= as.Date(paste0(Data_Price$REF_DATE,"-01")),
                         Product=c("Wheat (except durum wheat) [1121111]"))
 print(Price_data)
 
+sum(is.na(Price_data))
+
+# Averaging the price of "Wheat (except durum wheat) [1121111]" accross all provinces to have 1 avg monthly price value for whole of Canada
+Price_data<-Price_data%>%
+  group_by(Date)%>%
+  summarise(avg_price_canada=mean(Price_per_MTonne,na.rm= TRUE))%>%
+  mutate(Months=row_number(),
+         Year=year(Date),
+         Quarter=quarter(Date))%>%
+  ungroup()
+
+print(Price_data)
+
+
+#scatterplot showing movement in over from 2002 to 2025
+
+
+plot(Price_data$Date, Price_data$avg_price_canada, main="Scatterplot of wheat prices",
+     xlab="Months", ylab="Average price")
+
+#simple linear regression model
+Price_smodel<-lm(avg_price_canada~Months, data = Price_data)
+
+print(Price_smodel)
+
+plot(Price_data$Months, Price_data$avg_price_canada, main="Scatterplot of price of wheat over monthly",
+     xlab="Months", ylab="Average price per month")+
+
+abline(Price_smodel,col="red")
+
+
+#box plot data
+                       
+
+boxplot(avg_price_canada~Year,data = Price_data)
+
+
+#visibly there are some outliers in year 2011 and 2020, but due to their proximity to minimum and maximum we will include them in our data set
+
 
 Price_chart = ggplot(Price_data, aes(x=Date,y= Price_per_MTonne, group=1))+
                        geom_line(color="green", size=1)+
