@@ -31,6 +31,10 @@ library(dplyr)
 library(readr)
 price_data <- read_csv("3210007701_databaseLoadingData.csv")
 head(price_data)
+
+
+
+
 ```
 
 ```{r}
@@ -38,9 +42,10 @@ data2 <- read_csv("3210035101_databaseLoadingData_2.csv")
 head(data2)
 ```
 
-#1.2 Graphical exploration (delivery data)
+## 1.2 Graphical exploration (delivery data)
 
 ```{r}
+
 library(ggplot2)
 
 delivery_data = data.frame(Date = data2$REF_DATE,
@@ -57,37 +62,137 @@ p2 = ggplot(delivery_data, aes(x=Date, y = Value, group=1))+
     caption = "Source: Statistics Canada. Table 32-10-0351-01  Producer deliveries of major grains"
   ) 
 print(p2)
+
+
 ```
 
-#1.2 Graphical exploration (price data)
+#1.2 Graphical exploration (Price Data)
 
 ```{r}
 
-library(dplyr)
+library(readr)
 library(ggplot2)
-library(lubridate)
+library(quantmod) # loading data sets from online
+library(dplyr) # for the pipes
+library(kableExtra) # for kable
+library(lubridate) # for years...
+library(knitr)
+library(tidyr)
 
-price_data <- price_data %>%
-  mutate(date = as.Date(paste0(REF_DATE, "-01")))
+#Downloading data
+Data_Price <- read.csv("https://raw.githubusercontent.com/stardustsunrise/Time_Series/refs/heads/main/3210007701_databaseLoadingData.csv")
 
-price_data <- price_data %>%
-  group_by(date) %>%
-  summarize(
-    avg_price_canada = mean(VALUE, na.rm = TRUE)
-  ) %>%
+head(Data_Price)
+str(Data_Price)
+print(Data_Price)
+
+#Convert to data frame
+Price_data = data.frame(Date= as.Date(paste0(Data_Price$REF_DATE,"-01")), 
+                        Price_per_MTonne= Data_Price$VALUE,
+                        Product=c("Wheat (except durum wheat) [1121111]"))
+print(Price_data)
+
+sum(is.na(Price_data))
+
+# Average monthly price across provinces
+Price_data <- Price_data %>%
+  group_by(Date) %>%
+  summarise(avg_price_canada = mean(Price_per_MTonne, na.rm=TRUE)) %>%
+  mutate(Months=row_number(),
+         Year=year(Date),
+         Quarter=quarter(Date)) %>%
   ungroup()
 
-ggplot(price_data, aes(x = date, y = avg_price_canada)) +
-  geom_line() +
+print(Price_data)
+
+# Scatterplot
+plot(Price_data$Date, Price_data$avg_price_canada,
+     main="Scatterplot of wheat prices",
+     xlab="Months", ylab="Average price")
+
+# Simple linear regression
+Price_smodel <- lm(avg_price_canada ~ Months, data = Price_data)
+print(Price_smodel)
+
+plot(Price_data$Months, Price_data$avg_price_canada,
+     main="Scatterplot of price of wheat over monthly",
+     xlab="Months", ylab="Average price per month")
+abline(Price_smodel,col="red")
+
+# Boxplot by year
+boxplot(avg_price_canada ~ Year, data = Price_data)
+
+# Line chart ggplot (use avg_price_canada, not Price_per_MTonne)
+Price_chart = ggplot(Price_data, aes(x=Date, y=avg_price_canada, group=1)) +
+  geom_line(color="green", size=1) +
   labs(
-    title = "Monthly Average Prices of Wheat in Canada",
-    x = "Month",
-    y = "Average Price"
-  ) +
-  theme_minimal()
-print(price_data)
+    title = "Price of Farm products per Month",
+    subtitle= "2002-2025",
+    x="Date (Monthly)",
+    y="Price (Monthly)",
+    caption= "Source: StatsCan"
+  )
+print(Price_chart)
+
+# Another aggregation (already aggregated, this does nothing harmful)
+Price_data <- Price_data %>%
+  group_by(Date) %>%
+  summarise(avg_price_canada=mean(avg_price_canada, na.rm=TRUE)) %>%
+  ungroup()
+
+print(Price_data)
+
+Price_chart2 = ggplot(Price_data, aes(x=Date, y=avg_price_canada, group=1)) +
+  geom_line(color="black", size=1) +
+  labs(
+    title="Price of Wheat, Excluding Durum",
+    subtitle = "2002-2025",
+    x="Date(Monthly)",
+    y="Average Price Across Canada",
+    caption="Source: Statistics Canada. Table 32-10-0351-01 Prices of Farm products"
+  )
+print(Price_chart2)
+
+# Descriptive Statistics
+summary(Price_data)
+
+desc_stat1 <- Price_data %>%
+  summarise(
+    Observation = n(),
+    Starting_Date = min(Date),
+    End_Date = max(Date),
+    Mean = mean(avg_price_canada),
+    SD = sd(avg_price_canada)
+  )
+print(desc_stat1)
+
+desc_stat2 <- Price_data %>%
+  summarise(
+    Min = min(avg_price_canada),
+    Q1 = quantile(avg_price_canada, 0.25),
+    Median = median(avg_price_canada),
+    Q3 = quantile(avg_price_canada, 0.75),
+    Max = max(avg_price_canada)
+  )
+print(desc_stat2)
+
+kable(desc_stat1,
+      caption = "Descriptive Statistics: Price Per Tonne Wheat (excluding Durum)",
+      col.names = c("Observation", "Start Date", "End Date", "Mean", "Std Dev"), digits=2) %>%
+  kable_styling(latex_options = c("striped","hold_position", "scale_down"))
+
+kable(desc_stat2,
+      caption="Descriptive Statistics: Price Per Tonne Wheat (excluding Durum)",
+      col.names= c("Minimum","Q1","Median","Q3","Maximum"),
+      digits=2) %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down", position = "center"))
+
+
+
 
 ```
+
+
 
 #2.1 Removing the Trend (Delivery data)
 
@@ -117,6 +222,52 @@ abline(h = 0, col = 'black', lty = 2)
 #Log Differencing is the best option.
 ```
 
+#2.1 Removing Trend (Price Data)
+
+```{r}
+library(patchwork)
+library(tseries)
+library(gridExtra)
+         
+print(Price_data)
+
+
+#converting time series to object
+
+Price_data_ts=ts(Price_data$avg_price_canada,
+                 start = c(2002-01-01,1),
+                 frequency = 12)
+
+str(Price_data_ts)
+
+#calculate transformation
+Diff=diff(Price_data_ts)#First difference
+Log_diff=diff(log(Price_data_ts))#Difference of Logarithms
+
+#create dataframe for visualisation
+Price_data_transform=data.frame(
+  Date=Price_data$Date[-1],
+  Diff=as.numeric(Diff),
+  Log_diff=as.numeric(Log_diff)
+)
+
+p1=ggplot(Price_data_transform,aes(x=Date,y=Diff))+
+  geom_line(color="blue")+
+  labs(title = "Wheat Price Data Set- First Difference",
+       x="Date",
+       y="Price per Ton")
+
+p2=ggplot(Price_data_transform,aes(x=Date,y=Log_diff))+
+  geom_line(color="green")+
+  labs(title = "Wheat Price Data Set- Log Difference",
+       x="Date",
+       y="Price per Ton")
+
+#display side by side
+p1/p2
+# preference for log difference
+```
+
 # 2.2 Removing Seasonal Effects (delivery data)
 
 ```{r}
@@ -139,6 +290,117 @@ plot( delivery_data_deseasonalized, type = 'l', xlab = 'Date', ylab = "Wheat (To
 abline(h = 0, col = 'black', lty = 2)
 
 
+
+```
+
+#2.2 Removing seasonal component (price data)
+
+```{r}
+library(forecast)
+
+#Indentifying Seasonality
+
+par(mfrow=c(1,2))
+Acf(Diff,
+main = "ACF of diff(Price of Wheat)",
+lag.max = 300,
+xlab = "Months", 
+xlim=c(1,300))
+
+Acf(Log_diff,
+    main = "ACF of diff(log(Price of Wheat))",
+    lag.max = 300,
+    xlab = "Months", 
+    xlim = c(1, 300))
+
+#Test for iid noise
+
+# Ljung-Box tests
+cat("1. Ljung-Box tests (H0: No autocorrelation up to lag 48):\n\n")
+## 1. Ljung-Box tests (H0: No autocorrelation up to lag 48):
+
+Box.test(Diff, lag = 12, type = "Ljung-Box")
+
+
+Box.test(Diff, lag = 12, type = "Ljung-Box")
+
+
+plot(Log_diff,type="l",xlab="n", ylab=expression("Log_diff"))
+abline(h=0,col="darkgreen",lty=2)
+
+
+
+# Removing Seasonality
+
+P_D1<-diff(Log_diff,difference=1)
+P_D3<-diff(Log_diff,differences=3)
+P_D12<-diff(Log_diff,differences=12)
+P_D24<-diff(Log_diff,differences=24)
+
+# First order difference
+
+plot( P_D1, type = 'l', xlab = 'Months' , ylab = expression(nabla*"Price Per Ton"))
+
+
+#third order difference
+plot( P_D3, type = 'l', xlab = 'Months', ylab = expression(nabla^3*"Price Per Ton"))
+
+#12th order difference
+plot( P_D12, type = 'l', xlab = 'Months', ylab = expression(nabla^12*"Price Per Ton"))
+
+#24th order difference
+plot( P_D24, type = 'l', xlab = 'Months', ylab = expression(nabla^24*"Price Per Ton"))
+
+
+#preference to Difference of 1st order
+
+Deseasonlised_pricedata=P_D1
+#2.3 Analysis of differenced Series (Price Data)
+library(ggplot2)
+Mean_pricedata=mean(Deseasonlised_pricedata)
+
+Mean_pricedata
+
+Variance_pricedata=var(Deseasonlised_pricedata)
+
+Variance_pricedata
+
+Standard_dav_Pricedata=sqrt(Variance_pricedata)
+Variance_pricedata
+
+summary(Deseasonlised_pricedata)
+
+
+lower = qnorm(mean = Mean_pricedata, sd = Standard_dav_Pricedata, p=0.05)
+
+upper = qnorm(mean = Mean_pricedata, sd = Standard_dav_Pricedata, p=0.95)
+
+plot(Deseasonlised_pricedata, type = 'l', main = 'Price Data, deseasonalized', xlab = 'month', ylab = "Wheat shipped, tonnes")
+abline(h = 0, col = 'darkblue', lty = 2)
+abline(h = lower, col = 'darkgreen', lty = 2)
+abline(h = upper, col = 'darkred', lty = 2)
+
+
+#Check if 95% is within.
+number=0
+for(n in 1:length(Deseasonlised_pricedata)){
+  if(Deseasonlised_pricedata[n]>upper){
+    number=number+1
+  }
+  if(Deseasonlised_pricedata[n]<lower){
+    number=number+1
+  }
+}
+ number
+ 
+ #29 out of 287 (about 10%) of the values lie outside this range. If the process is stationary, about 5% (14.35) should lie outside this interval on average.
+ 
+ acf(Deseasonlised_pricedata, 
+    main="ACF of deseasonalized series",
+    lag.max = 300,
+    xlab = "Months",
+    xlim=c(1,12)
+  )
 
 ```
 
@@ -181,195 +443,13 @@ for(n in 1:length(delivery_data_deseasonalized)){
  
 ```
 
-#3.1
+# 3.1 Linear Filter
+
+## Linear Smoothing 
 
 ```{r}
 
-library(zoo)
 
-# Define q ranges
-q_grid_var <- 1:10
-q_grid_rmse <- 1:10
-
-# Variance after smoothing
-vars <- sapply(q_grid_var, function(q) {
-  var(rollmean(delivery_data_deseasonalized, k = q, fill = NA), na.rm = TRUE)
-})
-
-plot(q_grid_var, vars, type = "b",
-     xlab = "q", ylab = "Variance after smoothing",
-     main = "Variance Reduction vs q")
-
-# RMSE after smoothing
-rmse_results <- sapply(q_grid_rmse, function(q) {
-  sm <- rollmean(delivery_data_deseasonalized, k = q, fill = NA)
-  sqrt(mean((delivery_data_deseasonalized - sm)^2, na.rm = TRUE))
-})
-
-plot(q_grid_rmse, rmse_results, type = "b", pch = 19, col = "blue",
-     xlab = "Smoothing Parameter (q)", 
-     ylab = "RMSE", 
-     main = "RMSE vs. Parameter q")
-
-# Apply chosen q, 2 plots to compare
-q <- 5
-q2 = 4
-
-smoothed <- rollmean(delivery_data_deseasonalized, k = q, fill = NA)
-smoothed2 <- rollmean(delivery_data_deseasonalized, k = q2, fill = NA)
-
-zoom_start = 0
-zoom_end = 100
-
-plot(delivery_data_deseasonalized, type = "l",
-     col = "gray50", lwd = 1,
-     main = paste("Linear Moving Average Filter (q =", q, ")"),
-     xlab = "Time", ylab = "Value",
-     xlim = c(zoom_start, zoom_end))
-
-lines(smoothed, col = "red", lwd = 2)
-
-legend("topleft",
-       legend = c("Original", "Moving Average"),
-       col = c("gray50", "red"),
-       lwd = c(1, 2),
-       bty = "n")
-
-grid()
-
-#Second plot to compare with
-
-
-plot(delivery_data_deseasonalized, type = "l",
-     col = "gray50", lwd = 1,
-     main = paste("Linear Moving Average Filter (q2 =", q2, ")"),
-     xlab = "Time", ylab = "Value",
-     xlim = c(zoom_start, zoom_end))
-
-lines(smoothed2, col = "red", lwd = 2)
-
-legend("topleft",
-       legend = c("Original", "Moving Average"),
-       col = c("gray50", "red"),
-       lwd = c(1, 2),
-       bty = "n")
-
-grid()
-
-```
-
-```{r}
- acf(delivery_ts, 
-    main="ACF of deseasonalized series",
-    lag.max = 48,
-    xlab = "Months",
-    xlim=c(1,48)
-  )
-```
-
-```{r}
-
-library(forecast)
-
-
-
-
-# Suppose your time series is called 'ts_data'
-
-# Grid of alpha values to test
-alpha_values <- seq(0.1, 0.5, by = 0.05)
-
-# Function to compute MSE for a given alpha
-mse_for_alpha <- function(alpha) {
-  model <- ses(delivery_data_deseasonalized, alpha = alpha, initial = "simple", h = 1)
-  mean((delivery_data_deseasonalized - fitted(model))^2)
-}
-
-# Compute MSE for each alpha
-errors <- sapply(alpha_values, mse_for_alpha)
-
-# Find alpha with the minimum MSE
-best_alpha <- alpha_values[which.min(errors)]
-best_alpha
-
-
-alpha_value <- 0.5
-exp_series <- ses(delivery_data_deseasonalized, alpha = alpha_value, initial = "simple")$fitted
-
-plot(delivery_data_deseasonalized, type = "l",
-     col = "gray50", lwd = 1,
-     main = "Exponential Smoothing Filter",
-     xlab = "Time", ylab = "Value")
-
-lines(exp_series, col = "blue", lwd = 2)
-
-legend("topleft",
-       legend = c("Original", "Exponential Smoothed"),
-       col = c("gray50", "blue"),
-       lwd = c(1, 2),
-       bty = "n")
-
-grid()
-
-alpha_value <- 0.5
-exp_series <- ses(delivery_data_deseasonalized, alpha = alpha_value, initial = "simple")$fitted
-
-# Define your zoom window here
-zoom_start <- 100
-zoom_end <- 150
-
-plot(delivery_data_deseasonalized, type = "l",
-     col = "gray50", lwd = 1,
-     main = "Exponential Smoothing Filter (Zoomed View)",
-     xlab = "Time", ylab = "Value",
-     xlim = c(zoom_start, zoom_end)) # This line performs the "slice"
-
-lines(exp_series, col = "blue", lwd = 2)
-
-legend("topleft",
-       legend = c("Original", "Exponential Smoothed"),
-       col = c("gray50", "blue"),
-       lwd = c(1, 2),
-       bty = "n")
-
-grid()
-
-
-
-```
-
-```{r}
-zoom_start = 100
-zoom_end = 150
-
-plot(delivery_data_deseasonalized, type = "p",
-     col = "gray60", pch = 16, cex = 0.6,
-     main = "Comparison of Filtering Techniques",
-     xlab = "Time", ylab = "Value",
-     xlim = c(zoom_start, zoom_end))
-
-lines(smoothed, col = "red", lwd = 2)
-lines(exp_series, col = "blue", lwd = 2)
-
-legend("topleft",
-       legend = c("Original", "Moving Average", "Exponential Smoothing"),
-       col = c("gray60", "red", "blue"),
-       pch = c(16, NA, NA),
-       lwd = c(NA, 2, 2),
-       pt.cex = c(0.8, NA, NA),
-       bty = "n")
-
-grid()
-
-
-
-
-
-
-```
-
-```{r}
-#with lab
 
 delivery_ts <- ts(data2$VALUE,
                   start = c(2002,1), # Start year and month: January 2002
@@ -391,6 +471,9 @@ moving_average <- function(X, q) {
 }
 
 # Apply moving average to your existing time series
+
+
+
 X_filt1 <- ts(moving_average(delivery_ts, 6),
               start = start(delivery_ts),
               frequency = frequency(delivery_ts))
@@ -400,16 +483,27 @@ X_filt2 <- ts(moving_average(delivery_ts, 12),
               frequency = frequency(delivery_ts))
 
 
-zoom_start <- 1
-zoom_end <- 100
-
-delivery_zoom <- window(delivery_ts, end = time(delivery_ts)[zoom_end])
-X_filt1_zoom <- window(X_filt1, end = time(X_filt1)[zoom_end])
-X_filt2_zoom <- window(X_filt2, end = time(X_filt2)[zoom_end])
+zoom_start <- 180
+zoom_end <- 288
 
 
+
+delivery_zoom <- window(delivery_ts,
+                        start = time(delivery_ts)[zoom_start],
+                        end = time(delivery_ts)[zoom_end])
+X_filt1_zoom <- window(X_filt1,
+                       start = time(X_filt1)[zoom_start],
+                       end = time(X_filt1)[zoom_end])
+
+X_filt2_zoom <- window(X_filt2,
+                       start = time(X_filt2)[zoom_start],
+                       end = time(X_filt2)[zoom_end])
+
+
+
+#Zoom plot
 plot.ts(delivery_zoom,
-        main = 'Delivery Data Deseasonalized (First 100 Obs)',
+        main = 'Delivery Data zoom',
         xlab = 'Time',
         ylab = 'Values')
 
@@ -419,7 +513,7 @@ lines(X_filt2_zoom, col = 'blue', lwd = 2)
 abline(h = 0, col = 'black', lty = 2)
 
 legend("topright",
-       legend = c("Original", "q=2", "q=10"),
+       legend = c("Original", "q=6", "q=12"),
        col = c('black', 'red', 'blue'),
        lty = 1,
        lwd = 2)
@@ -427,16 +521,16 @@ legend("topright",
 
 
 
-# Plot original series and filtered versions
+# Plot all obs
 plot.ts(delivery_ts,
-        main = 'Delivery Data Deseasonalized',
+        main = 'Delivery Data',
         xlab = 'Time',
         ylab = 'Values')
 lines(X_filt1, type = 'l', col = 'red')   # Add MA(q=2) in red
 lines(X_filt2, type = 'l', col = 'blue')  # Add MA(q=12) in blue
 abline(h = 0, col = 'black', lty = 2)     # Reference line at 0
 legend("topright",
-       legend = c("Original", "q=2", "q=12"),
+       legend = c("Original", "q=6", "q=12"),
        col = c('black', 'red', 'blue'),
        lty = 1,
        lwd = 2)
@@ -444,3 +538,520 @@ legend("topright",
 
 
 ```
+
+q=12 is better
+
+#Question 3: filtering
+
+\## 3.1 Linear Smoothing
+
+We have \$\$X̃\_t = (1/(2q+1)) Σ\_{j=-q}\^{q} X\_{t-j}\$
+
+```{r}
+# Apply filtering to log-differenced series
+Series_to_filter <- Price_data_ts
+n <- length(Series_to_filter)
+
+# --- q = 6 ---
+q1 <- 6 #this is in the range from 5 to 9, helping reduce the high volatility of the data
+weights1 <- rep(1/(2*q1+1), 2*q1+1)
+
+Linear_filtered_q6 <- stats::filter(
+  Series_to_filter,
+  filter = weights1,
+  sides = 2
+)
+
+# --- q = 12 ---
+q2 <- 12 #this helps to address the seasonality of the data
+weights2 <- rep(1/(2*q2+1), 2*q2+1)
+
+Linear_filtered_q12 <- stats::filter(
+  Series_to_filter,
+  filter = weights2,
+  sides = 2
+)
+
+# --- Plot ---
+plot(Series_to_filter, type="l", col="black",
+     main="Linear Moving Average Filter Price Data",
+     ylab="Values")
+
+lines(Linear_filtered_q6, col="blue", lwd=2)
+lines(Linear_filtered_q12, col="red", lwd=2)
+
+legend("topright",
+       legend=c("Original", "q = 6", "q = 12"),
+       col=c("black", "blue", "red"),
+       lty=1, lwd=c(1,2,2))
+
+```
+
+Justification of q = 12: Monthly data → annual seasonal structure ≈ 12 months. Justification of q = 6: The data shows a decently high level of volatility (or high variance in other terms)
+
+
+
+# 3.2 Exponential filter
+
+#Delivery Data
+
+\$$X̃_t = α X_t + (1−α) X̃_{t−1
+
+```{r}
+
+exponential_smoothing <- function(X, alpha) {
+  N <- length(X)
+  X_smooth <- rep(NA, N)
+  
+  # Initialize with first observation
+  X_smooth[1] <- X[1]
+  
+  # Recursive smoothing
+  for (t in 2:N) {
+    X_smooth[t] <- alpha * X[t] + (1 - alpha) * X_smooth[t - 1]
+  }
+  
+  return(X_smooth)
+}
+
+
+
+X_exp1 <- ts(exponential_smoothing(delivery_ts, alpha = 0.1),
+             start = start(delivery_ts),
+             frequency = frequency(delivery_ts))
+
+X_exp2 <- ts(exponential_smoothing(delivery_ts, alpha = 0.2),
+             start = start(delivery_ts),
+             frequency = frequency(delivery_ts))
+
+
+
+zoom_start <- 50
+zoom_end <- 200
+
+delivery_zoom <- window(delivery_ts,
+                        start = time(delivery_ts)[zoom_start],
+                        end = time(delivery_ts)[zoom_end])
+
+
+X_exp1_zoom <- window(X_exp1,
+                      start = time(X_exp1)[zoom_start],
+                      end = time(X_exp1)[zoom_end])
+X_exp2_zoom <- window(X_exp2, 
+                      start = time(X_exp2)[zoom_start],
+                      end = time(X_exp2)[zoom_end])
+
+
+
+
+
+plot.ts(delivery_zoom,
+        main = 'Delivery Data (Exponential Smoothing Zoom)',
+        xlab = 'Time',
+        ylab = 'Values')
+
+lines(X_exp1_zoom, col = 'red', lwd = 2)
+lines(X_exp2_zoom, col = 'blue', lwd = 2)
+
+abline(h = 0, col = 'black', lty = 2)
+
+legend("topright",
+       legend = c("Original", "alpha = 0.1", "alpha = 0.3"),
+       col = c('black', 'red', 'blue'),
+       lty = 1,
+       lwd = 2)
+
+
+
+
+plot.ts(delivery_ts,
+        main = 'Delivery Data (Exponential Smoothing)',
+        xlab = 'Time',
+        ylab = 'Values')
+
+lines(X_exp1, col = 'red')
+lines(X_exp2, col = 'blue')
+
+abline(h = 0, col = 'black', lty = 2)
+
+legend("topright",
+       legend = c("Original", "alpha = 0.1", "alpha = 0.3"),
+       col = c('black', 'red', 'blue'),
+       lty = 1,
+       lwd = 2)
+
+
+```
+
+
+#Price Data
+
+```{r}
+
+exponential_smoothing <- function(X, alpha) {
+  N <- length(X)
+  X_smooth <- rep(NA, N)
+  
+  # Initialize with first observation
+  X_smooth[1] <- X[1]
+  
+  # Recursive smoothing
+  for (t in 2:N) {
+    X_smooth[t] <- alpha * X[t] + (1 - alpha) * X_smooth[t - 1]
+  }
+  
+  return(X_smooth)
+}
+
+# --- Alpha for seasonal smoothing ---
+X_exp1 <- ts(exponential_smoothing(Price_data_ts, alpha = 0.2),
+             start = start(Price_data_ts),
+             frequency = frequency(Price_data_ts))
+# --- Alpha for high volatility ---
+X_exp2 <- ts(exponential_smoothing(Price_data_ts, alpha = 0.8),
+             start = start(Price_data_ts),
+             frequency = frequency(Price_data_ts))
+plot.ts(Price_data_ts,
+        main = 'Exponential Smoothing Comparison Price Data',
+        xlab = 'Time',
+        ylab = 'Values')
+
+lines(X_exp1, col = 'red')
+lines(X_exp2, col = 'blue')
+
+abline(h = 0, col = 'black', lty = 2)
+
+legend("topright",
+       legend = c("Original", "alpha = 0.2", "alpha = 0.8"),
+       col = c('black', 'red', 'blue'),
+       lty = 1,
+       lwd = 2)
+
+
+```
+
+I would recommend the linear filter since the Exponential one does not
+appear to make as big of a difference. The optimal filtering from the
+ones chosen is linear with q=12 as it appears to be the most smooth from
+those seen
+
+
+
+# 3.3 Comparison of Filtering Techniques ()
+
+```{r}
+q_choice <- 12
+alpha_choice <- 0.1
+
+
+# Moving average (linear smoothing)
+X_ma <- ts(moving_average(delivery_ts, q_choice),
+           start = start(delivery_ts),
+           frequency = frequency(delivery_ts))
+
+# Exponential smoothing
+X_exp <- ts(exponential_smoothing(delivery_ts, alpha_choice),
+            start = start(delivery_ts),
+            frequency = frequency(delivery_ts))
+
+
+zoom_start = 180
+zoom_end <- 288
+
+delivery_zoom <- window(delivery_ts,
+                        start = time(delivery_ts)[zoom_start],
+                        end = time(delivery_ts)[zoom_end])
+
+X_ma_zoom <- window(X_ma,
+                    start = time(X_ma)[zoom_start],
+                    end = time(X_ma)[zoom_end])
+
+X_exp_zoom <- window(X_exp,
+                     start = time(X_exp)[zoom_start],
+                     end = time(X_exp)[zoom_end])
+
+#plot with zoom
+plot.ts(delivery_zoom,
+        main = paste("MA(q =", q_choice, ") vs Exp(alpha =", alpha_choice, ")"),
+        xlab = "Time",
+        ylab = "Values")
+
+lines(X_ma_zoom, col = "red", lwd = 2)
+lines(X_exp_zoom, col = "blue", lwd = 2)
+
+abline(h = 0, col = "black", lty = 2)
+
+legend("topright",
+       legend = c("Original",
+                  paste("MA q =", q_choice),
+                  paste("Exp alpha =", alpha_choice)),
+       col = c("black", "red", "blue"),
+       lty = 1,
+       lwd = 2)
+
+
+
+#Plot with all the observations
+plot.ts(delivery_ts,
+        main = paste("Moving Average vs Exponential Smoothing"),
+        xlab = "Time",
+        ylab = "Values")
+
+lines(X_ma, col = "red", lwd = 2)
+lines(X_exp, col = "blue", lwd = 2)
+
+abline(h = 0, col = "black", lty = 2)
+
+legend("topright",
+       legend = c("Original", 
+                  paste("MA q =", q_choice),
+                  paste("Exp alpha =", alpha_choice)),
+       col = c("black", "red", "blue"),
+       lty = 1,
+       lwd = 2)
+
+
+```
+
+
+
+# 4. Stationarity
+
+# 4.1 Construction of Stationary Series (Delivery Data)
+
+```{r}
+
+residuals_q12 <- delivery_ts - X_filt2
+
+#autocorr function
+
+autocorr <- function(X, hmax) {
+  
+  X <- na.omit(X)     # Remove NA values
+  N <- length(X)
+  hmax <- min(hmax, N - 1)
+  
+  mu <- mean(X)
+  gamma0 <- sum((X - mu)^2) / N   # Variance at lag 0
+  
+  acf_values <- numeric(hmax + 1)
+  
+  for (h in 0:hmax) {
+    gamma_h <- sum((X[1:(N-h)] - mu) * (X[(h+1):N] - mu)) / N
+    acf_values[h + 1] <- gamma_h / gamma0
+  }
+  
+  return(acf_values)
+}
+
+
+
+
+# Detrend the series by subtracting the moving average (q = 12)
+residuals_q12 <- delivery_ts - X_filt2   # Residuals after removing trend/seasonality
+
+# Set up 1x2 plot layout
+par(mfrow = c(1, 2))
+
+# Panel 1: Plot the detrended series
+plot.ts(na.omit(residuals_q12),
+        main = "Detrended series (q = 12)",
+        ylab = "Residuals",
+        xlab = "Time")
+
+abline(h = 0, col = "red")
+
+# Panel 2: ACF of detrended series
+hmax <- 20  # Maximum lag for ACF
+
+acf1 <- autocorr(na.omit(residuals_q12), hmax)  # Compute ACF 
+
+
+
+#Nyk's code
+res <- na.omit(residuals_q12)
+
+mu <- mean(res)
+sigma <- sd(res)
+
+upper <- mu + 1.96 * sigma
+lower <- mu - 1.96 * sigma
+
+
+number <- 0
+
+for (n in 1:length(residuals_q12)) {
+  
+  x <- residuals_q12[n]
+  
+  if (!is.na(x)) {   # Skip NA values
+    
+    if (x > upper) {
+      number <- number + 1
+    }
+    
+    if (x < lower) {
+      number <- number + 1
+    }
+  }
+}
+
+number
+
+
+```
+
+## Significance Test (Delivery Data)
+
+```{r}
+Stationary_series <- Deseasonlised_pricedata
+library(tseries)
+
+# ADF Test
+adf.test(Stationary_series)
+
+# KPSS Test
+kpss.test(Stationary_series)
+```
+
+
+#4.1 Construction of Stationary Series (Price Data)
+
+For the price data the deseasonalized series was chosen since it does not appear to have a
+trend or a major seasonal component, whereas the filtered data appears
+to still have a trend. Now we can test for stationarity
+
+```{r}
+plot(Deseasonlised_pricedata, type = 'l', main = 'Price Data, deseasonalized', xlab = 'month', ylab = "Wheat shipped, tonnes")
+abline(h = 0, col = 'darkblue', lty = 2)
+abline(h = lower, col = 'darkgreen', lty = 2)
+abline(h = upper, col = 'darkred', lty = 2)
+
+```
+
+
+## Significance Test (Price Data)
+
+```{r}
+
+library(tseries)
+adf.test(na.omit(residuals_q12))
+
+kpss.test(na.omit(residuals_q12))
+
+```
+
+ADF test and KPSS support that the series is stationary.
+
+
+##4.2 Autocorrelation Function (ACF)
+$$ρ^​(h)=∑t=1n​(Xt​−Xˉ)2∑t=h+1n​(Xt​−Xˉ)(Xt−h​−Xˉ)​$$
+
+###Delivery Data
+
+```{r}
+ACF_estimator <- function(X, hmax){
+  n <- length(X)
+  X_bar <- mean(X)
+  acf_vals <- numeric(hmax+1)
+  
+  for(h in 0:hmax){
+    num <- sum((X[(h+1):n]-X_bar)*
+                 (X[1:(n-h)]-X_bar))
+    den <- sum((X-X_bar)^2)
+    acf_vals[h+1] <- num/den
+  }
+  
+  return(acf_vals)
+}
+
+
+res <- na.omit(residuals_q12)
+
+hmax <- 40
+acf_values <- ACF_estimator(res, hmax)
+
+CI <- 1.96 / sqrt(length(res))
+
+plot(0:hmax, acf_values, type = "h",
+     main = "Estimated ACF",
+     xlab = "Lag", ylab = "ACF")
+abline(h = 0)
+abline(h = CI, col = "red", lty = 2)
+abline(h = -CI, col = "red", lty = 2)
+
+```
+
+###Delivery Data (Price Data)
+
+```{r}
+
+hmax <- 40
+acf_values <- ACF_estimator(Stationary_series, hmax)
+
+# 95% CI
+CI <- 1.96/sqrt(length(Stationary_series))
+
+plot(0:hmax, acf_values, type="h",
+     main="Estimated ACF",
+     xlab="Lag", ylab="ACF")
+abline(h=0)
+abline(h=CI, col="red", lty=2)
+abline(h=-CI, col="red", lty=2)
+
+```
+
+We have some seasonal spikes, which means there is remaining
+periodicity. 
+
+
+
+
+##4.3 Custom PACF Function
+
+###Delivery Data
+
+```{r}
+PACF_estimator <- function(X, hmax){
+  
+  X <- na.omit(X)        # ← critical line
+  pacf_vals <- numeric(hmax)
+  
+  for(h in 1:hmax){
+    model <- ar(X, order.max = h, aic = FALSE, method = "yw")
+    pacf_vals[h] <- model$ar[h]
+  }
+  
+  return(pacf_vals)
+}
+
+
+pacf_values <- PACF_estimator(residuals_q12, hmax)
+
+plot(1:hmax, pacf_values, type="h",
+     main="Estimated PACF",
+     xlab="Lag", ylab="PACF")
+abline(h=0)
+abline(h=CI, col="blue", lty=2)
+abline(h=-CI, col="blue", lty=2)
+```
+
+
+```{r}
+
+
+pacf_values <- PACF_estimator(Stationary_series, hmax)
+
+plot(1:hmax, pacf_values, type="h",
+     main="Estimated PACF",
+     xlab="Lag", ylab="PACF")
+abline(h=0)
+abline(h=CI, col="blue", lty=2)
+abline(h=-CI, col="blue", lty=2)
+
+```
+
+Looks like there is gradual decay and thus this may be an MA process.
+
+
+
