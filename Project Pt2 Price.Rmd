@@ -41,9 +41,9 @@ P_D12<-diff(Log_diff,differences=12)
 P_D24<-diff(Log_diff,differences=24)
 
 
-#preference to Difference of 1st order
+#preference to Difference of 12th order
 
-Deseasonlised_pricedata=P_D1
+Deseasonlised_pricedata=P_D12
 
 # Apply filtering to log-differenced series
 Series_to_filter <- Price_data_ts
@@ -69,10 +69,39 @@ Linear_filtered_q12 <- stats::filter(
   sides = 2
 )
 ```
+```{r}
+#compare the differences
+plot(P_D1)
+plot(P_D12)
+```
+```{r}
+library(forecast)
+library(gridExtra)
+library(ggplot2)
+
+# Function to simulate and return ACF/PACF plots
+plot_arma_acf_pacf <- function(ar = numeric(0), ma = numeric(0), n = 500) {
+  # Use safe coefficients if ar/ma supplied are too big
+  if(length(ar) > 0) ar <- rep(0.3, length(ar))
+  if(length(ma) > 0) ma <- rep(0.5, length(ma))
+  
+  ts_data <- arima.sim(model = list(ar = ar, ma = ma), n = n)
+  acf_plot <- ggAcf(ts_data) + ggtitle(paste0("ACF AR=", length(ar), " MA=", length(ma)))
+  pacf_plot <- ggPacf(ts_data) + ggtitle(paste0("PACF AR=", length(ar), " MA=", length(ma)))
+  return(list(acf_plot, pacf_plot))
+}
+
+# Example: simulate ARMA(2,1)
+plots <- plot_arma_acf_pacf(ar = c(0.3, 0.3), ma = 0.5)
+grid.arrange(plots[[1]], plots[[2]], ncol = 2)
+```
+
 
 # Question 5: Dickey-Fuller Unit Root Test
 
 ```{r}
+Stationary_series <- Deseasonlised_pricedata
+library(tseries)
 # ADF Test
 adf.test(Stationary_series)
 ```
@@ -177,6 +206,7 @@ plot(Stationary_series, type="l")
 ##(1) - Divide data into training and test set
 ```{r}
 n <- length(Stationary_series)
+n
 
 train_size <- floor(0.8 * n)
 
@@ -185,16 +215,22 @@ test <- Stationary_series[(train_size + 1):n]
 ```
 ##(2) - estimate an ARMA(p,q) model with macimum likelihood
 ```{r}
-model1 <- arima(train, order = c(3, 0, 2), method = "ML")
+model1 <- arima(train, order = c(5, 0, 0), method = "ML")
 summary(model1)
 ```
-This is an ARMA(3,2)
+This is an AR(5)
 ##(3) - Estimate a nested model
 ```{r}
-model2 <- arima(train, order = c(0,0,1), method="ML")
+model2 <- arima(train, order = c(4,0,0), method="ML")
 summary(model2)
 ```
-This is an MA(1)
+This is an AR(4)
+
+```{r}
+model3 <- arima(train, order = c(0,0,5), method="ML")
+summary(model3)
+```
+
 ##(4) - present the estimated parameters and standard errors
 
 ```{r}
