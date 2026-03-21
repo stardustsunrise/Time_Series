@@ -1,0 +1,275 @@
+---
+title: "Project Pt2 Price"
+author: "Group 1"
+date: "2026-03-14"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Pre-Project Part 2 filtering and processing
+```{r}
+library(patchwork)
+library(tseries)
+library(gridExtra)
+        
+#2.1 Removing Trend
+
+#converting time series to object
+
+Price_data_ts=ts(Price_data$avg_price_canada,
+                 start = c(2002-01-01,1),
+                 frequency = 12)
+
+str(Price_data_ts)
+
+#calculate transformation
+Diff=diff(Price_data_ts)#First difference
+Log_diff=diff(log(Price_data_ts))#Difference of Logarithms
+#2.2 Removing seasonal component
+
+library(forecast)
+
+
+# Removing Seasonality
+
+P_D1<-diff(Log_diff,difference=1)
+P_D3<-diff(Log_diff,differences=3)
+P_D12<-diff(Log_diff,differences=12)
+P_D24<-diff(Log_diff,differences=24)
+
+
+#preference to Difference of 12th order
+
+Deseasonlised_pricedata=P_D12
+
+# Apply filtering to log-differenced series
+Series_to_filter <- Price_data_ts
+n <- length(Series_to_filter)
+
+# --- q = 6 ---
+q1 <- 6 #this is in the range from 5 to 9, helping reduce the high volatility of the data
+weights1 <- rep(1/(2*q1+1), 2*q1+1)
+
+Linear_filtered_q6 <- stats::filter(
+  Series_to_filter,
+  filter = weights1,
+  sides = 2
+)
+
+# --- q = 12 ---
+q2 <- 12 #this helps to address the seasonality of the data
+weights2 <- rep(1/(2*q2+1), 2*q2+1)
+
+Linear_filtered_q12 <- stats::filter(
+  Series_to_filter,
+  filter = weights2,
+  sides = 2
+)
+```
+```{r}
+#compare the differences
+plot(P_D1)
+plot(P_D12)
+```
+```{r}
+library(forecast)
+library(gridExtra)
+library(ggplot2)
+
+# Function to simulate and return ACF/PACF plots
+plot_arma_acf_pacf <- function(ar = numeric(0), ma = numeric(0), n = 500) {
+  # Use safe coefficients if ar/ma supplied are too big
+  if(length(ar) > 0) ar <- rep(0.3, length(ar))
+  if(length(ma) > 0) ma <- rep(0.5, length(ma))
+  
+  ts_data <- arima.sim(model = list(ar = ar, ma = ma), n = n)
+  acf_plot <- ggAcf(ts_data) + ggtitle(paste0("ACF AR=", length(ar), " MA=", length(ma)))
+  pacf_plot <- ggPacf(ts_data) + ggtitle(paste0("PACF AR=", length(ar), " MA=", length(ma)))
+  return(list(acf_plot, pacf_plot))
+}
+
+# Example: simulate ARMA(2,1)
+plots <- plot_arma_acf_pacf(ar = c(0.3, 0.3), ma = 0.5)
+grid.arrange(plots[[1]], plots[[2]], ncol = 2)
+```
+
+
+# Question 5: Dickey-Fuller Unit Root Test
+
+```{r}
+Stationary_series <- Deseasonlised_pricedata
+library(tseries)
+# ADF Test
+adf.test(Stationary_series)
+```
+p-value = 0.01 < 0.05 and thus we confirm that the data is stationary with 95% certainty
+# Question 6: Selection of ARMA Model Orders
+##(1) - ACF and PACF and (2) - CIs
+Autocorrelation Function (ACF):
+$$ρ^​(h)=∑t=1n​(Xt​−Xˉ)2∑t=h+1n​(Xt​−Xˉ)(Xt−h​−Xˉ)​$$
+```{r}
+ACF_estimator <- function(X, hmax){
+  n <- length(X)
+  X_bar <- mean(X)
+  acf_vals <- numeric(hmax+1)
+  
+  for(h in 0:hmax){
+    num <- sum((X[(h+1):n]-X_bar)*
+                 (X[1:(n-h)]-X_bar))
+    den <- sum((X-X_bar)^2)
+    acf_vals[h+1] <- num/den
+  }
+  
+  return(acf_vals)
+}
+
+hmax <- 40
+acf_values <- ACF_estimator(Stationary_series, hmax)
+
+plot_acf_ci <- function(acf_values, series, hmax, ci = 0.95) {
+  
+  n <- length(series)
+  
+  # get correct z value
+  z <- qnorm(1 - (1 - ci) / 2)
+  
+  # confidence interval
+  CI <- z / sqrt(n)
+  
+  plot(0:hmax, acf_values, type = "h",
+       main = paste("Estimated ACF (", ci*100, "% CI)", sep=""),
+       xlab = "Lag", ylab = "ACF")
+  
+  abline(h = 0)
+  abline(h = CI, col = "red", lty = 2)
+  abline(h = -CI, col = "red", lty = 2)
+}
+# Plots for different CIs
+plot_acf_ci(acf_values, Stationary_series, hmax, ci = 0.90)
+plot_acf_ci(acf_values, Stationary_series, hmax, ci = 0.95)
+plot_acf_ci(acf_values, Stationary_series, hmax, ci = 0.99)
+
+```
+Lags for which coefficients not statistically different from 0:
+90%: 0,1,2,12,22,24,26,30,36,38; 95%: 0,1,2,12,22,24,30,36,38; 99%: 1,2,12,22,24,36,38.
+
+Partial Autocorelation function (PACF):
+```{r}
+PACF_estimator <- function(X, hmax){
+  pacf_vals <- numeric(hmax)
+  
+  for(h in 1:hmax){
+    model <- ar(X, order.max=h, aic=FALSE, method="yw")
+    pacf_vals[h] <- model$ar[h]
+  }
+  
+  return(pacf_vals)
+}
+
+# estimator with chosen CIs
+plot_pacf_ci <- function(pacf_values, series, hmax, ci = 0.95){
+  
+  n <- length(series)
+  z <- qnorm(1 - (1 - ci)/2)
+  CI <- z / sqrt(n)
+  
+  plot(1:hmax, pacf_values, type="h",
+       main=paste("Estimated PACF (", ci*100, "% CI)", sep=""),
+       xlab="Lag", ylab="PACF")
+  
+  abline(h=0)
+  abline(h=CI, col="blue", lty=2)
+  abline(h=-CI, col="blue", lty=2)
+}
+pacf_values <- PACF_estimator(Stationary_series, hmax)
+
+plot_pacf_ci(pacf_values, Stationary_series, hmax, ci=0.90)
+plot_pacf_ci(pacf_values, Stationary_series, hmax, ci=0.95)
+plot_pacf_ci(pacf_values, Stationary_series, hmax, ci=0.99)
+
+```
+Lags for which coefficients not statistically different from 0:
+90%:1,2,3,4,5,6,9,10,11,12,22,23,25,29,31,35,37; 95%: 1,2,3,4,9,10,11,12,22,35; 99%:1,2,3,4,10,11,35.
+
+
+##(3) - Hypothesis regarding appropriate orders of the ARMA(p,q)
+```{r}
+
+auto.arima(Stationary_series, seasonal = FALSE, stationary =TRUE)
+```
+The test says that this series matches an AR(5) model. However,the graphs suggest more of a ARMA(3,4) model (4 significant lags on ACF, 3 significant lags on PACF). We will try to go off of the graph for the sake of this analysis. 
+#Question 7
+Checking for structural breaks
+```{r}
+plot(Stationary_series, type="l")
+```
+While there are some spikes in the data, it does not appear that there were any structural breaks. Thus, we can proceed with an 80-20 division for the data
+##(1) - Divide data into training and test set
+```{r}
+n <- length(Stationary_series)
+n
+
+train_size <- floor(0.8 * n)
+
+train <- Stationary_series[1:train_size]
+test <- Stationary_series[(train_size + 1):n]
+```
+##(2) - estimate an ARMA(p,q) model with macimum likelihood
+```{r}
+model1 <- arima(train, order = c(3, 0, 4), method = "ML")
+summary(model1)
+```
+This is an ARMA(3,4) and the aic is around 734. 
+
+##(3) - Estimate a nested model
+```{r}
+model2 = arima(train, order = c(2,0,3),
+      method = "ML",
+      optim.control = list(maxit = 2000))
+model2
+```
+This is an ARMA(2,3), which is a nested model and it gives a lower aic (711) than the higher order model, which means it is likely optimal (lower aic should give for a better model)
+
+##(4) - present the estimated parameters and standard errors
+
+```{r}
+coef(model1)
+sqrt(diag(model1$var.coef))
+
+coef(model2)
+sqrt(diag(model2$var.coef))
+
+```
+##Create a table of estimates
+
+```{r}
+params1 <- coef(model1)
+se1 <- sqrt(diag(model1$var.coef))
+
+params2 <- coef(model2)
+se2 <- sqrt(diag(model2$var.coef))
+
+params3 <- coef(model3)
+se3 <- sqrt(diag(model3$var.coef))
+
+table1 <- data.frame(
+  Parameter = names(params1),
+  Estimate = params1,
+  StdError = se1
+)
+
+table2 <- data.frame(
+  Parameter = names(params2),
+  Estimate = params2,
+  StdError = se2
+)
+
+table1
+table2
+```
+Although the ARMA(3,4) model converged, it is not reliable because several MA coefficients have undefined (NaN) standard errors, indicating numerical instability and issues with invertibility. Additionally, some parameter estimates are extremely large and close to non-stationary boundaries.
+The ARMA(2,3) model, while still showing relatively large coefficients, provides finite standard errors for all parameters, making it more stable and interpretable.
+Therefore, the ARMA(2,3) model is preferred over the ARMA(3,4) model, although both models may be overparameterized.
