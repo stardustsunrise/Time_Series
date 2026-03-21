@@ -1,0 +1,270 @@
+---
+title: "Time Series Project Part II (Delivery)"
+author: "Group 1"
+output:
+  pdf_document:
+    latex_engine: xelatex
+date: "2026-03-14"
+---
+
+#
+
+```{r}
+
+library(readr)
+library(ggplot2)
+library(readr)
+library(ggplot2)
+library(quantmod) # loading data sets from online
+library(dplyr) # for the pipes
+library(kableExtra) # for kable
+library(lubridate) # for years...
+library(tidyr)
+library(knitr)
+library(forecast)     # for Acf, Pacf, auto.arima, etc.  
+library(tseries)      # for adf.test  
+library(gridExtra)    # for arranging plots  
+
+
+data2 <- read_csv("3210035101_databaseLoadingData_2.csv")
+head(data2)
+
+
+
+delivery_data = data.frame(Date = data2$REF_DATE,
+                           Value = as.numeric(data2$VALUE))
+
+head(delivery_data)
+p2 = ggplot(delivery_data, aes(x=Date, y = Value, group=1))+
+             geom_line(color="blue", size=1)+
+  labs(
+    title = "Producer deliveries of Wheat, Excluding Durum",
+    subtitle = "2002-2025",
+    x = "Date (Monthly)",
+    y = "Grain (Tonnes)",
+    caption = "Source: Statistics Canada. Table 32-10-0351-01  Producer deliveries of major grains"
+  ) 
+print(p2)
+
+delivery_ts <- ts(data2$VALUE,
+                  start = c(2002,1), # Start year and month: January 2002
+                  frequency = 12) # 12 observations per year (monthly data)
+
+
+# Define moving average filter function
+moving_average <- function(X, q) {
+  N <- length(X)              # Length of input series
+  weight <- 1 / (2 * q + 1)   # Equal weights for symmetric MA
+  indices <- (q+1):(N-q)      # Indices where filter can be applied
+  X_filt <- rep(NA, N)        # Initialize output with NAs
+  
+  # Apply moving average filter
+  for (i in indices) {
+    X_filt[i] <- sum(X[(i-q):(i+q)] * weight)
+  }
+  return(X_filt)               # Return filtered series
+}
+
+
+delivery_data_D3 = diff(log(delivery_data$Value))
+
+delivery_data_des = diff(delivery_data_D3, lag=12)
+
+```
+
+# Part II
+
+## Question 5 
+
+```{r}
+
+
+library(tseries)
+
+# ADF Test
+adf.test(delivery_data_des)
+
+```
+
+
+
+
+
+
+## Question 6
+
+Point 1 and 2
+
+
+```{r}
+#---ACF estimator function---------------
+
+ACF_estimator <- function(X, hmax){
+      n <- length(X)
+      X_bar <- mean(X)
+      acf_vals <- numeric(hmax+1)
+      
+      for(h in 0:hmax){
+        num <- sum((X[(h+1):n]-X_bar)*
+                     (X[1:(n-h)]-X_bar))
+        den <- sum((X-X_bar)^2)
+        acf_vals[h+1] <- num/den
+      }
+      
+      return(acf_vals)
+    }
+
+
+res <- na.omit(delivery_data_des)
+
+hmax <- 40
+
+
+acf_values <- ACF_estimator(res, hmax)
+
+#---PACF estimator function-----------------------------------
+
+PACF_estimator <- function(X, hmax){
+      
+      X <- na.omit(X)        # ← critical line
+      pacf_vals <- numeric(hmax)
+      
+      for(h in 1:hmax){
+        model <- ar(X, order.max = h, aic = FALSE, method = "yw")
+        pacf_vals[h] <- model$ar[h]
+      }
+      
+      return(pacf_vals)
+    }
+
+
+pacf_values <- PACF_estimator(delivery_data_des, hmax)
+
+#--------Setting Up the CI--------------
+
+CI_95 <- 1.96 / sqrt(length(res))  #90% 1.645    99% 2.576
+CI_90 <- 1.645 / sqrt(length(res))
+CI_99 <- 2.576 / sqrt(length(res))
+
+#----------Plot ACF-----------------------------------
+
+#90% CI Plot
+
+plot(0:hmax, acf_values, type = "h",
+      main = "Estimated ACF 90% CI",
+      xlab = "Lag", ylab = "ACF")
+abline(h = 0)
+abline(h = CI_90, col = "red", lty = 2)
+abline(h = -CI_90, col = "red", lty = 2)
+
+
+    #95% CI Plot
+plot(0:hmax, acf_values, type = "h",
+     main = "Estimated ACF 95% CI",
+     xlab = "Lag", ylab = "ACF")
+abline(h = 0)
+abline(h = CI_95, col = "red", lty = 2)
+abline(h = -CI_95, col = "red", lty = 2)
+
+#99% CI Plot
+plot(0:hmax, acf_values, type = "h",
+      main = "Estimated ACF 99% CI",
+      xlab = "Lag", ylab = "ACF")
+abline(h = 0)
+abline(h = CI_99, col = "red", lty = 2)
+abline(h = -CI_99, col = "red", lty = 2)
+
+#----------Plot PACF-------------------------
+
+#90% CI Plot
+plot(1:hmax, pacf_values, type="h",
+      main="Estimated PACF 90% CI",
+      xlab="Lag", ylab="PACF")
+abline(h=0)
+abline(h=CI_90, col="blue", lty=2)
+abline(h=-CI_90, col="blue", lty=2)
+
+
+#95% CI Plot
+plot(1:hmax, pacf_values, type="h",
+      main="Estimated PACF 95% CI",
+      xlab="Lag", ylab="PACF")
+abline(h=0)
+abline(h=CI_95, col="blue", lty=2)
+abline(h=-CI_95, col="blue", lty=2)
+
+
+#99% CI Plot
+plot(1:hmax, pacf_values, type="h",
+      main="Estimated PACF 99% CI",
+      xlab="Lag", ylab="PACF")
+abline(h=0)
+abline(h=CI_99, col="blue", lty=2)
+abline(h=-CI_99, col="blue", lty=2)
+
+
+
+
+```
+
+
+
+Point 3
+
+
+The ACF shows a significant spike at Lag 1 and a potentially significant spike at Lag 2 before cutting off. This is characteristic of a Moving Average process, specifically suggesting an MA(1) or MA(2). The PACF does not show a clear cutoff; instead, we can see a  decaying pattern (ignoring seasonal lags at 12, 24, and 36). This decay in the PACF is a sign of an AR(1) component or that this is simply and MA(q) process.
+
+Significant spikes remain at seasonal lags (12, 24, 36). While these indicate remaining seasonal correlation, they are being bypassed for the scope of this project, as advised by professor Boire.
+
+For Question 7, we compare three model ARMA(1,2), ARMA(1,1) and MA(2). 
+
+
+## Question 7
+
+```{r stargazer, results='asis'}
+
+#-----Splitting into training test and test sets----------------
+n = length(delivery_data_des)
+
+y = delivery_data_des
+
+n_train <- floor(0.8 * n)
+y_train <- y[1:n_train]
+y_test <- y[(n_train+1):n]
+
+
+#----Model Estimation on the Training Set--------------------
+
+fit_11 <- arima(y_train, order = c(1,0,4), include.mean = FALSE) #fit given by 
+fit_12 <- arima(y_train, order = c(1,0,2), include.mean = FALSE) #testing this fit to see if we're overfitting
+fit_13 <- arima(y_train, order = c(0,0,2), include.mean = FALSE) #random test
+
+
+#----Displaying the results with stargazer---------
+
+se_11 <- sqrt(diag(fit_11$var.coef))
+se_12 <- sqrt(diag(fit_12$var.coef))
+se_13 <- sqrt(diag(fit_13$var.coef))
+
+library(stargazer)
+
+stargazer(fit_11, fit_12, fit_13,
+type = "latex",
+se = list(se_11, se_12, se_13),
+title = "ARMA Estimation Results",
+column.labels = c("ARMA(1,4)", "ARMA(1,1)", "MA(2)"),
+digits = 3,
+header = FALSE)
+
+
+
+
+```
+
+
+For the model ARMA(2,1), none of the coefficients are significant. 
+
+For the second model ARMA(1,1), the coefficients are all significant which might indicate a good fit. The AR(1)= 0.263 indicates a positive momentum. If the series was high in the previous period, it has a 26.3% tendency to stay high in the next period. The MA(1) = -0.926 represents a strong shock absorbed. This suggests that if there was an error spike in the previous period, the model expects an almost equal and opposite correction in the next period, which we can sometimes see in the raw data. 
+
+For the third model MA(2), we also have all significant coefficients. MA(1)= -0.648 can be interpreted that if there was a positive shock last month, this month is adjusted downwards by 64.8% of last months value. MA(2)=-0.246 is interpreted as the secondary correction based on the shock two months prior. 
+
