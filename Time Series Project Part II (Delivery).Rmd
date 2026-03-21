@@ -235,8 +235,8 @@ y_test <- y[(n_train+1):n]
 
 #----Model Estimation on the Training Set--------------------
 
-fit_11 <- arima(y_train, order = c(1,0,4), include.mean = FALSE) #fit given by 
-fit_12 <- arima(y_train, order = c(1,0,2), include.mean = FALSE) #testing this fit to see if we're overfitting
+fit_11 <- arima(y_train, order = c(1,0,2), include.mean = FALSE) #fit given by 
+fit_12 <- arima(y_train, order = c(1,0,1), include.mean = FALSE) #testing this fit to see if we're overfitting
 fit_13 <- arima(y_train, order = c(0,0,2), include.mean = FALSE) #random test
 
 
@@ -252,7 +252,7 @@ stargazer(fit_11, fit_12, fit_13,
 type = "latex",
 se = list(se_11, se_12, se_13),
 title = "ARMA Estimation Results",
-column.labels = c("ARMA(1,4)", "ARMA(1,1)", "MA(2)"),
+column.labels = c("ARMA(1,2)", "ARMA(1,1)", "MA(2)"),
 digits = 3,
 header = FALSE)
 
@@ -262,9 +262,17 @@ header = FALSE)
 ```
 
 
-For the model ARMA(2,1), none of the coefficients are significant. 
+For the model ARMA(1,2), all of our coefficients are significative. A strong negative autoregressive coefficient AR(1)= -0.886 suggests the series is oscillating. If the value was high last month, it’s very likely to be low this month.MA(1) = 0.304 is a momentum effect and if we had a positive shock last month, approximately 30.4% of that shock persists into the next month in the same direction. The second lag MA(2) = 0.696 is the most dominant feature of the moving average component. A positive shock occurring at two months ago would results in a significant downward pressure (around 69.9% of that positive shock) on the series this month.
 
-For the second model ARMA(1,1), the coefficients are all significant which might indicate a good fit. The AR(1)= 0.263 indicates a positive momentum. If the series was high in the previous period, it has a 26.3% tendency to stay high in the next period. The MA(1) = -0.926 represents a strong shock absorbed. This suggests that if there was an error spike in the previous period, the model expects an almost equal and opposite correction in the next period, which we can sometimes see in the raw data. 
+For the second model ARMA(1,1), The AR(1)=0.056 is not significant. This model is "over-specified." It is trying to use an autoregressive component that isn't actually helping. 
 
-For the third model MA(2), we also have all significant coefficients. MA(1)= -0.648 can be interpreted that if there was a positive shock last month, this month is adjusted downwards by 64.8% of last months value. MA(2)=-0.246 is interpreted as the secondary correction based on the shock two months prior. 
+For the third model, the MA(2)= 0.048 term is not significant for similar reasons as the ARMA(1,1)
+
+The best model so far is the ARMA(1,2). 
+
+```{r}
+
+```
+
+
 
