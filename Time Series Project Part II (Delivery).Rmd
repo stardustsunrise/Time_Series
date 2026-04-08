@@ -7,7 +7,7 @@ output:
 date: "2026-03-14"
 ---
 
-#
+# 
 
 ```{r}
 
@@ -74,7 +74,7 @@ delivery_data_des = diff(delivery_data_D3, lag=12)
 
 # Part II
 
-## Question 5 
+## Question 5
 
 ```{r}
 
@@ -86,15 +86,9 @@ adf.test(delivery_data_des)
 
 ```
 
-
-
-
-
-
 ## Question 6
 
 Point 1 and 2
-
 
 ```{r}
 #---ACF estimator function---------------
@@ -207,17 +201,13 @@ abline(h=-CI_99, col="blue", lty=2)
 
 ```
 
-
-
 Point 3
 
-
-The ACF shows a significant spike at Lag 1 and a potentially significant spike at Lag 2 before cutting off. This is characteristic of a Moving Average process, specifically suggesting an MA(1) or MA(2). The PACF does not show a clear cutoff; instead, we can see a  decaying pattern (ignoring seasonal lags at 12, 24, and 36). This decay in the PACF is a sign of an AR(1) component or that this is simply and MA(q) process.
+The ACF shows a significant spike at Lag 1 and a potentially significant spike at Lag 2 before cutting off. This is characteristic of a Moving Average process, specifically suggesting an MA(1) or MA(2). The PACF does not show a clear cutoff; instead, we can see a decaying pattern (ignoring seasonal lags at 12, 24, and 36). This decay in the PACF is a sign of an AR(1) component or that this is simply and MA(q) process.
 
 Significant spikes remain at seasonal lags (12, 24, 36). While these indicate remaining seasonal correlation, they are being bypassed for the scope of this project, as advised by professor Boire.
 
-For Question 7, we compare three model ARMA(1,2), ARMA(1,1) and MA(2). 
-
+For Question 7, we compare three model ARMA(1,2), ARMA(1,1) and MA(2).
 
 ## Question 7
 
@@ -261,18 +251,119 @@ header = FALSE)
 
 ```
 
-
 For the model ARMA(1,2), all of our coefficients are significative. A strong negative autoregressive coefficient AR(1)= -0.886 suggests the series is oscillating. If the value was high last month, it’s very likely to be low this month.MA(1) = 0.304 is a momentum effect and if we had a positive shock last month, approximately 30.4% of that shock persists into the next month in the same direction. The second lag MA(2) = 0.696 is the most dominant feature of the moving average component. A positive shock occurring at two months ago would results in a significant downward pressure (around 69.9% of that positive shock) on the series this month.
 
-For the second model ARMA(1,1), The AR(1)=0.056 is not significant. This model is "over-specified." It is trying to use an autoregressive component that isn't actually helping. 
+For the second model ARMA(1,1), The AR(1)=0.056 is not significant. This model is "over-specified." It is trying to use an autoregressive component that isn't actually helping.
 
 For the third model, the MA(2)= 0.048 term is not significant for similar reasons as the ARMA(1,1)
 
-The best model so far is the ARMA(1,2). 
+The best model so far is the ARMA(1,2).
+
+## Question 8
 
 ```{r}
+## Computing AIC
+aic_11 <- AIC(fit_11)
+aic_12 <- AIC(fit_12)
+aic_13 <- AIC(fit_13)
+
+
+## Computing BIC
+bic_11 <- BIC(fit_11)
+bic_12 <- BIC(fit_12)
+bic_13 <- BIC(fit_13)
+
+ic_table <- matrix(
+c(aic_11, aic_12,aic_13,
+bic_11, bic_12, bic_13),
+nrow = 2,
+byrow = TRUE)
+rownames(ic_table) <- c("AIC (Train)", "BIC (Train)")
+colnames(ic_table) <- c("ARMA(1,2)", "ARMA(1,1)", "MA(2)")
+stargazer(ic_table,
+type = "latex",
+summary = FALSE,
+title = "Information Criteria",
+digits = 3,
+header = FALSE
+)
+
+#Both the AIC and BIc tests favour the ARMA(1,2). The ARMA(1,1) and MA(2) have similar results, but the MA(2) is better than the ARMA(1,1). We will do future comparisons using only the ARMA(1,2) and MA(2).
+
+## Likelihood Ratio Test
+#H0: the constrained model (MA(2))) is adequate.
+#H1: the unconstrained model (ARMA(1,2)) is significantly better.
+
+LL13 <- fit_13$loglik  #MA(2)
+LL11 <- fit_11$loglik   #ARMA(1,2)
+
+LR_stat <- 2 * (LL11 - LL13)
+df <- length(fit_11$coef) - length(fit_13$coef)
+p_value <- 1 - pchisq(LR_stat, df)
+lr_table <- matrix(c(LR_stat, df, p_value), nrow = 1)
+colnames(lr_table) <- c("LR Statistic", "df", "p-value")
+stargazer(lr_table,
+type = "latex",
+summary = FALSE,
+title = "Likelihood Ratio Test",
+digits = 4,
+header = FALSE)
+
+#The p-value is very small, so we can reject the null hypothesis at a confidence level of p=0.01 So we prefer the ARMA(1,2) over the MA(2).
+
+
+
+
+#Compute the in-sample fitted values using the training set
+fitted_value_11 <- y_train - residuals(fit_11)
+fitted_value_13 <- y_train - residuals(fit_13)
+
+
+#Produce out-of-sample forecasts on the test set 
+fc_11 <- forecast(y_test, model = fit_11, h=n-n_train)
+fc_13 <- forecast(y_test, model = fit_13, h=n-n_train)
+
+#Compute the mean squared error (MSE) for both in-sample fitting and out-of-sample forecasting
+rmse <- function(actual, forecast) { sqrt(mean((actual - forecast)^2)) }  #root mean squared error
+mae <- function(actual, forecast) { mean(abs(actual - forecast)) }    #mean absolute error
+
+
+# Performance table
+perf_table <- matrix(c(
+rmse(y_train, fitted_value_11), rmse(y_train, fitted_value_13),
+rmse(y_test, fc_11$mean), rmse(y_test, fc_13$mean),
+mae(y_train, fitted_value_11), mae(y_train, fitted_value_13),
+mae(y_test, fc_11$mean), mae(y_test, fc_13$mean)
+), nrow = 4, byrow = TRUE)
+rownames(perf_table) <- c("RMSE (In-sample)", "RMSE (Out-of-sample)",
+"MAE (In-sample)", "MAE (Out-of-sample)")
+colnames(perf_table) <- c("ARMA(1,2)", "MA(2)")
+stargazer(perf_table,
+type = "latex",
+summary = FALSE,
+title = "Performance Comparison",
+digits = 4,
+header = FALSE)
+
+#For the out-of-sample results, the ARMA(1,2) has smaller errors for both the RMSE and MAE, so it is better fitted.
+
+
+#Each of the tests above favoured the ARMA(1,2) model over the MA(2).So we recommend an ARMA(1,2) for this series.
+```
+##Question 9
+```{r}
+#approximate the innovation series using the innovations algorithm
+# Innovations
+e_hat <- residuals(fit_11)
+  
+# Properties of innovations
+mean=mean(e_hat)
+print(mean)
+var=var(e_hat)
+print(var)
+autocorrelation = acf(e_hat)
+#The mean of the innovation is close to zero, the variance is less than infinity, and the autocorrelation is not significant for lags other than 0, so it behaves as white noise.
+
 
 ```
-
-
 
