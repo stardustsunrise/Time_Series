@@ -14,6 +14,42 @@ knitr::opts_chunk$set(echo = TRUE)
 library(patchwork)
 library(tseries)
 library(gridExtra)
+library(readr)
+library(ggplot2)
+library(quantmod) # loading data sets from online
+library(dplyr) # for the pipes
+library(kableExtra) # for kable
+library(lubridate) # for years...
+library(knitr)
+library(tidyr)
+
+Data_Price <- read.csv("https://raw.githubusercontent.com/stardustsunrise/Time_Series/refs/heads/main/3210007701_databaseLoadingData.csv")
+
+head(Data_Price)
+str(Data_Price)
+
+print(Data_Price)
+
+
+#Convert to data frame
+
+
+Price_data = data.frame(Date= as.Date(paste0(Data_Price$REF_DATE,"-01")), 
+                        Price_per_MTonne= Data_Price$VALUE,
+                        
+                        Product=c("Wheat (except durum wheat) [1121111]"))
+print(Price_data)
+
+# Averaging the price of "Wheat (except durum wheat) [1121111]" accross all provinces to have 1 avg monthly price value for whole of Canada
+Price_data<-Price_data%>%
+  group_by(Date)%>%
+  summarise(avg_price_canada=mean(Price_per_MTonne,na.rm= TRUE))%>%
+  mutate(Months=row_number(),
+         Year=year(Date),
+         Quarter=quarter(Date))%>%
+  ungroup()
+
+print(Price_data)
         
 #2.1 Removing Trend
 
@@ -100,6 +136,7 @@ grid.arrange(plots[[1]], plots[[2]], ncol = 2)
 # Question 5: Dickey-Fuller Unit Root Test
 
 ```{r}
+
 Stationary_series <- Deseasonlised_pricedata
 library(tseries)
 # ADF Test
@@ -220,7 +257,7 @@ test <- Stationary_series[(train_size + 1):n]
 ##(2) - estimate an ARMA(p,q) model with macimum likelihood
 ```{r}
 model1 <- arima(train, order = c(3, 0, 4), method = "ML")
-summary(model1)
+summary(model1) #ARMA(3.4)
 ```
 This is an ARMA(3,4) and the aic is around 734. 
 
@@ -229,13 +266,14 @@ This is an ARMA(3,4) and the aic is around 734.
 model2 = arima(train, order = c(2,0,3),
       method = "ML",
       optim.control = list(maxit = 2000))
-model2
+model2 #ARMA(2,3)
 ```
 This is an ARMA(2,3), which is a nested model and it gives a lower aic (711) than the higher order model, which means it is likely optimal (lower aic should give for a better model)
 
 ##(4) - present the estimated parameters and standard errors
 
 ```{r}
+
 coef(model1)
 sqrt(diag(model1$var.coef))
 
@@ -252,7 +290,7 @@ se1 <- sqrt(diag(model1$var.coef))
 params2 <- coef(model2)
 se2 <- sqrt(diag(model2$var.coef))
 
-params3 <- coef(model3)
+params3 <- coef(model3)  #model 3 not found
 se3 <- sqrt(diag(model3$var.coef))
 
 table1 <- data.frame(
@@ -273,3 +311,99 @@ table2
 Although the ARMA(3,4) model converged, it is not reliable because several MA coefficients have undefined (NaN) standard errors, indicating numerical instability and issues with invertibility. Additionally, some parameter estimates are extremely large and close to non-stationary boundaries.
 The ARMA(2,3) model, while still showing relatively large coefficients, provides finite standard errors for all parameters, making it more stable and interpretable.
 Therefore, the ARMA(2,3) model is preferred over the ARMA(3,4) model, although both models may be overparameterized.
+
+```{r}
+
+#8.1
+#Computing AIC and BIC training models
+library(stargazer)
+library(forecast)
+aic_21=AIC(model1)
+aic_22=AIC(model2)
+bic_21=BIC(model1)
+bic_22=BIC(model2)
+
+ic2_table=matrix(
+  c(aic_21,aic_22,
+    bic_21,bic_22),
+  nrow = 2,
+  byrow = TRUE)
+
+rownames(ic2_table)=c("AIC - Train","BIC - Train")
+colnames(ic2_table)=c("ARMA(3,4)","ARMA(2,3)")
+
+print(ic2_table)
+
+stargazer(ic2_table,
+          type= "Latex",
+          summary= FALSE,
+          title= "Information Criteria",
+          digits=3,
+          header= FALSE
+          )
+
+test_model21=arima(test, order = c(3,0,4), include.mean = FALSE)
+test_model22=arima(test, order = c(2,0,3), include.mean = FALSE)
+test_model22 <- arima(test, order = c(3, 0, 4), method = "ML")
+test_model22= arima(test, order = c(2,0,3),
+      method = "ML",
+      optim.control = list(maxit = 2000))
+
+
+```
+```{r}
+#8.2 The likelihood ratio statistic for the nested models
+
+#Here ARMA(2,3) is a special case of ARMA(3,4)
+#H0: The constraint model ARMA(2,3)
+#H1: The unconstraint model ARMA(3,4)
+
+LL21=model1$loglik#ARMA(3,4)
+LL22=model2$loglik#ARMA(2,3)
+
+LR_stat=2*(LL21-LL22)
+df=length(model2$coef)-length(model2$coef)
+p_value=1-pchisq(LR_stat,df)
+
+lr_table=matrix(c(LR_stat,df,p_value), nrow = 1)
+colnames(lr_table)=c("LR Statistic", "df", "p-value")
+stargazer(lr_table,
+         type="latex",
+         summary= FALSE,
+         title="Likelihood Ratio Test",
+         digits=4,
+          header= FALSE)
+
+# With p-value=1 we must reject H0. There is sufficient evidence that ARMA(2,3) is a better model
+
+
+```
+```{r}
+#8.3
+#compute in sample fitted value using the training set
+
+#In- sample fitted value
+fitted_34=train-residuals(model1)
+fitted_23=train-residuals(model2)
+
+#out-of-sample forecaste on the test set
+fc_23=forecast(test, model=model2,h=n-train_size)
+fc_34=forecast(test, model=model1,h=n-train_size)
+fc_23=numeric(length(test))
+fc_34=numeric(length(test))
+
+rmse=function(actual,forecast){sqrt(mean((actual-forecast)^2))}
+mae=function(actual,forecast){mean(abs(actual-forecast))}
+
+#performance table
+perf_table=matrix(c(rmse(train,model2),rmse(train,model1),
+                    rmse(test,fc_23),rmse(test,fc_34),
+                    mae(train,model2),mae(train,fc_34),
+                    mae(test,fc_23),mae(test,fc_34)),nrow = 4,byrow = TRUE)
+
+#
+```
+
+
+
+
