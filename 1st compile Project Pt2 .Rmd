@@ -93,7 +93,7 @@ Data_Price <- read.csv("https://raw.githubusercontent.com/stardustsunrise/Time_S
 head(Data_Price)
 str(Data_Price)
 
-print(Data_Price)
+#print(Data_Price)
 
 
 #Convert to data frame
@@ -103,7 +103,7 @@ Price_data = data.frame(Date= as.Date(paste0(Data_Price$REF_DATE,"-01")),
                         Price_per_MTonne= Data_Price$VALUE,
                         
                         Product=c("Wheat (except durum wheat) [1121111]"))
-print(Price_data)
+#print(Price_data)
 
 # Averaging the price of "Wheat (except durum wheat) [1121111]" accross all provinces to have 1 avg monthly price value for whole of Canada
 Price_data<-Price_data%>%
@@ -114,7 +114,7 @@ Price_data<-Price_data%>%
          Quarter=quarter(Date))%>%
   ungroup()
 
-print(Price_data)
+#print(Price_data)
         
 #2.1 Removing Trend
 
@@ -648,7 +648,7 @@ title = "Performance Comparison",
 digits = 4,
 header = FALSE)
 
-#For the out-of-sample results, the ARMA(1,2) has smaller errors for both the RMSE and MAE, so it is better fitted.
+#For the out-of-sample results, the ARMA(1,2) and MA(2) have similar values, so we cannot say that the ARMA(1,2) is significantly better. The ARMA(1,2) has lower values for the in-sample results
 
 
 #Each of the tests above favoured the ARMA(1,2) model over the MA(2).So we recommend an ARMA(1,2) for this series.
@@ -895,26 +895,93 @@ Box.test(cross_cf_pd$acf , type = "Ljung-Box")
 #10
 ```{r}
 
-library(marima)
-merged_tests=merge(y_test,test)
-colnames(merged_tests)=c("Delivery","Price")
+#library(marima)
+#merged_tests=merge(y_test,test)
+#colnames(merged_tests)=c("Delivery","Price")
 
-model=lm(merged_tests$Price~merged_tests$Delivery,data=merged_tests)
-summary(model)
+#model=lm(merged_tests$Price~merged_tests$Delivery,data=merged_tests)
+#summary(model)
 
 
-m=arima(y_test,order = c(1,0,2), include.mean = FALSE, xreg = model)
+#Make forecast
+
+
+combined_forecast_d <- numeric(287)
+combined_forecast_p <- numeric(287)
+#Add training data
+
+for (i in 1:219){
+  a=y_train[i]
+  combined_forecast_d[i] <- a
+  combined_forecast_p[i] <- train[i]
+  print(y_train[i])
+}
+combined_forecast_d[220] <- y_train[220]
+combined_forecast_p[220]=combined_forecast_p[219]
+
+#Add forecasted values
+#pd_total=0
+#for (i in 1:23){
+#  b=cross_cf_pd$acf[i+24]
+#  pd_total=pd_total+b
+#}
+#dp_total=0
+#for (i in 1:20){
+#  b=cross_cf_dp$acf[i+21]
+#  dp_total=dp_total+b
+#}
+#
+var_d=var(y_train)
+var_p=var(train)
+
+for (i in 221:287){
+  d_val= combined_forecast_d[i-1]
+  print("s")
+  print(i)
+  print(d_val)
+    for (j in 1:23){
+      a=cross_cf_pd$acf[j+24]
+      a=a*(1+pd_total)
+      b=combined_forecast_p[i-j]
+      b=b*pd_total
+      d_val=d_val+a*b*var_d
+      print(a)
+      print(b)
+      print(d_val)
+  
+    }
+  combined_forecast_d[i] <- d_val
+  p_val= combined_forecast_p[i-1]
+  for (j in 1:20){
+    a=cross_cf_dp$acf[j+21]
+    a=a*(1-dp_total)
+      b=combined_forecast_d[i-j]
+      b=b*dp_total
+      p_val=p_val+a*b*var_p
+  }
+  combined_forecast_p[i] <- p_val
+}
+
+combined_forecast_d
+combined_forecast_p
+
+
+
+plot(combined_forecast_d, type="l")
+plot(combined_forecast_p, type="l")
+
+#m=arima(y_test,order = c(1,0,2), include.mean = FALSE, xreg = model)
 #merged delivery data and price data respectively
 
-n=length(cross_cf_pd$acf)
-alpha=0.05
-critical_value=abs(1.96/sqrt(n))
+#n=length(cross_cf_pd$acf)
+#alpha=0.05
+#critical_value=abs(1.96/sqrt(n))
 
-max_acf=max(abs(cross_cf_pd$acf))
+#max_acf=max(abs(cross_cf_pd$acf))
 
-#max_acf<crtical value hence we cannot reject H0 for independence at 5%
+#max_acf<critical value hence we cannot reject H0 for independence at 5%
 
-
+#forecast_delivery=forecast(merged_tests$Delivery, model = merged_tests, h=n-n_train+1)
 
 ```
 
