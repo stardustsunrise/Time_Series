@@ -490,7 +490,7 @@ For the third model, the MA(2)= 0.048 term is not significant for similar reason
 The best model so far is the ARMA(1,2).
 
 
-Price Data
+#Price Data
 Checking for structural breaks
 ```{r}
 plot(Stationary_series, type="l")
@@ -739,7 +739,7 @@ stargazer(ic2test_table,
 LL34=model34$loglik#ARMA(3,4)
 LL23=model23$loglik#ARMA(2,3)
 
-LR_stat=2*(LL23-LL34)
+LR_stat=2*(LL34-LL23)
 df=length(model34$coef)-length(model23$coef)
 p_value=1-pchisq(LR_stat,df)
 
@@ -760,8 +760,8 @@ stargazer(lr_table,
 ```{r}
 #8.3
 #compute in sample fitted value using the training set
-fc_34=numeric(length(test))
-fc_23=numeric(length(test))
+fc_34=(length(test))
+fc_23=(length(test))
 
 for (i in 1:length(test)){
   price_expanding=Stationary_series[1:(train_size+i-1)]
@@ -780,6 +780,9 @@ for (i in 1:length(test)){
 
 
 
+#fit1 is producing NANs as the there are many negative values in price_expanding, causing the variance to be negative as well. hence the error reflects sqrt(diag(x$var.coef)) : NaNs produced. Since Variance should always be positive in a stationary series, this error reflects the model is not stationary of the ARMA(3,4) is and ill fitting model for the data set
+
+
 #In- sample fitted value
 fitted_34=train-residuals(model34)
 fitted_23=train-residuals(model23)
@@ -794,9 +797,9 @@ mae=function(actual,forecast){mean(abs(actual-forecast))}
 
 #performance table
 perf_table_p=matrix(c(rmse(train,fitted_23),rmse(train,fitted_34),
-                    rmse(test,fc_23$mean),rmse(test,fc_34$mean),
+                    rmse(test,fc_23),rmse(test,fc_34),
                     mae(train,fitted_23),mae(train,fitted_34),
-                    mae(test,fc_23$mean),mae(test,fc_34$mean)),
+                    mae(test,fc_23),mae(test,fc_34)),
                   nrow = 4,
                   byrow = TRUE)
 
@@ -815,7 +818,7 @@ stargazer(perf_table_p,
 
 #Both RMSE and MAE- In sample- are smaller with ARMA(2,3)
 #Therefore ARMA(2,3) is preferred
-#Note: oddly enough - for ARMA(3,4) Out sample error is smaller than in sample, it could be due the smaller sample size of the test set
+#Note:  for ARMA(3,4) Out sample error is smaller than in sample, it could be due the smaller sample size of the test set
 
 ```
 Based on the diagnostic tests above, ARMA(2,3) is the better recommendation.
@@ -826,14 +829,14 @@ Delivery Data
 ```{r}
 #approximate the innovation series using the innovations algorithm
 # Innovations
-e_hat <- residuals(fit_11)
+e_hat_deli <- residuals(fit_11)
   
 # Properties of innovations
-mean=mean(e_hat)
+mean=mean(e_hat_deli)
 print(mean)
-var=var(e_hat)
+var=var(e_hat_deli)
 print(var)
-autocorrelation = acf(e_hat)
+autocorrelation = acf(e_hat_deli)
 #The mean of the innovation is close to zero, the variance is less than infinity, and the autocorrelation is not significant for lags other than 0, so it behaves as white noise.
 
 
@@ -845,21 +848,75 @@ Price Data
 #9.1 Approximate the innovation series
 library(itsmr)
 # Fit
-fit <- ar(fitted_23, aic = TRUE, order.max = 30,
+fit_price <- ar(fitted_23, aic = TRUE, order.max = 30,
           method ="yule-walker")
 # Innovations
-e_hat <- residuals(fit)
+e_hat_price <- residuals(fit_price)
 
 #9.2 Statistical properties of the approximated innovation
+e_hat_price=na.omit(e_hat_price)
+model23_mean=mean(e_hat_price, na.rm = TRUE)
+model23_var=var(e_hat_price,na.rm = TRUE)
+acf(e_hat_price, lag.max = NULL, type = c("correlation", "covariance", "partial"), plot = TRUE, na.action = na.pass)
 
-model23_mean=mean(e_hat, na.rm = TRUE)
-model23_var=var(e_hat,na.rm = TRUE)
-x=acf(e_hat, lag.max = NULL, type = c("correlation", "covariance", "partial"), plot = TRUE, na.action = na.pass)
+adf.test(e_hat_price)
+#residual time series is stationary the 
+
+#combined analysis of price and delivery data
+
+
+
+
+#9.3 cross-correlation between the residual ARMA models
+
+
+cross_cf_pd=Ccf(e_hat_price,e_hat_deli )
+cross_cf_dp=ccf(e_hat_deli,e_hat_price)
+
+
+
+
+
+
+
+#9.4
+
+
+#H0: The residual ARMA models are not correlated
+#H1: The residual ARMA models are correlated
+
+Box.test(cross_cf_pd$acf , type = "Ljung-Box")
+
+#p-value = 6.274e-08, there is significant evidence to reject H0 in favor of alternative hypothesis
+
+
+```
+#9.5 please refer to the report
+#10
+```{r}
+
+library(marima)
+merged_tests=merge(y_test,test)
+colnames(merged_tests)=c("Delivery","Price")
+
+model=lm(merged_tests$Price~merged_tests$Delivery,data=merged_tests)
+summary(model)
+
+
+m=arima(y_test,order = c(1,0,2), include.mean = FALSE, xreg = model)
+#merged delivery data and price data respectively
+
+n=length(cross_cf_pd$acf)
+alpha=0.05
+critical_value=abs(1.96/sqrt(n))
+
+max_acf=max(abs(cross_cf_pd$acf))
+
+#max_acf<crtical value hence we cannot reject H0 for independence at 5%
 
 
 
 ```
-
 
 
 
