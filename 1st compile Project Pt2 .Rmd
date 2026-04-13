@@ -630,7 +630,7 @@ fc_13 <- forecast(y_test, model = fit_13, h=n-n_train+1)
 #Compute the mean squared error (MSE) for both in-sample fitting and out-of-sample forecasting
 rmse <- function(actual, forecast) { sqrt(mean((actual - forecast)^2)) }  #root mean squared error
 mae <- function(actual, forecast) { mean(abs(actual - forecast)) }    #mean absolute error
-fc_11
+
 
 # Performance table
 perf_table_d <- matrix(c(rmse(y_train, fitted_value_11), rmse(y_train, fitted_value_13),
@@ -895,14 +895,6 @@ Box.test(cross_cf_pd$acf , type = "Ljung-Box")
 #10
 ```{r}
 
-#library(marima)
-#merged_tests=merge(y_test,test)
-#colnames(merged_tests)=c("Delivery","Price")
-
-#model=lm(merged_tests$Price~merged_tests$Delivery,data=merged_tests)
-#summary(model)
-
-
 #Make forecast
 
 
@@ -914,43 +906,36 @@ for (i in 1:219){
   a=y_train[i]
   combined_forecast_d[i] <- a
   combined_forecast_p[i] <- train[i]
-  print(y_train[i])
 }
 combined_forecast_d[220] <- y_train[220]
 combined_forecast_p[220]=combined_forecast_p[219]
 
 #Add forecasted values
-#pd_total=0
-#for (i in 1:23){
-#  b=cross_cf_pd$acf[i+24]
-#  pd_total=pd_total+b
-#}
-#dp_total=0
-#for (i in 1:20){
-#  b=cross_cf_dp$acf[i+21]
-#  dp_total=dp_total+b
-#}
-#
+pd_total=0
+for (i in 1:23){
+  b=cross_cf_pd$acf[i+24]
+  pd_total=pd_total+b
+}
+dp_total=0
+for (i in 1:20){
+  b=cross_cf_dp$acf[i+21]
+  dp_total=dp_total+b
+}
+
 var_d=var(y_train)
 var_p=var(train)
 
 for (i in 221:287){
   d_val= combined_forecast_d[i-1]
-  print("s")
-  print(i)
-  print(d_val)
     for (j in 1:23){
       a=cross_cf_pd$acf[j+24]
       a=a*(1+pd_total)
       b=combined_forecast_p[i-j]
       b=b*pd_total
       d_val=d_val+a*b*var_d
-      print(a)
-      print(b)
-      print(d_val)
-  
     }
   combined_forecast_d[i] <- d_val
+  
   p_val= combined_forecast_p[i-1]
   for (j in 1:20){
     a=cross_cf_dp$acf[j+21]
@@ -962,26 +947,27 @@ for (i in 221:287){
   combined_forecast_p[i] <- p_val
 }
 
-combined_forecast_d
-combined_forecast_p
-
-
 
 plot(combined_forecast_d, type="l")
 plot(combined_forecast_p, type="l")
 
-#m=arima(y_test,order = c(1,0,2), include.mean = FALSE, xreg = model)
-#merged delivery data and price data respectively
+# Performance table
+perf_table_c <- matrix(c(rmse(y_test, fc_11$mean), rmse(test, fc_23),  #RMSE univariate
+                         rmse(y_test, combined_forecast_d[221:287]), rmse(test, combined_forecast_p[221:287]),  #RMSE multivariate
+                         mae(y_test, fc_11$mean), mae(test, fc_23), #MAE univariate
+                         mae(y_test, combined_forecast_d[221:287]), mae(test, combined_forecast_p[221:287]) #MAE multivariate
+                         ), nrow = 4, byrow = TRUE)
+rownames(perf_table_c) <- c("RMSE (Univariate)", "RMSE (Bivariate)",
+"MAE (Univariate)", "MAE (Bivariate)")
+colnames(perf_table_c) <- c("Delivery Data", "Price Data")
+stargazer(perf_table_c,
+type = "latex",
+summary = FALSE,
+title = "Performance Comparison of Univariate and Bivariate Forecasting",
+digits = 4,
+header = FALSE)
 
-#n=length(cross_cf_pd$acf)
-#alpha=0.05
-#critical_value=abs(1.96/sqrt(n))
 
-#max_acf=max(abs(cross_cf_pd$acf))
-
-#max_acf<critical value hence we cannot reject H0 for independence at 5%
-
-#forecast_delivery=forecast(merged_tests$Delivery, model = merged_tests, h=n-n_train+1)
 
 ```
 
